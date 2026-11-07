@@ -38,3 +38,24 @@ Removing an id from `ADMIN_CLERK_USER_IDS` does not demote anyone. An env typo o
 
 ## ADR-013: Static authorization check (`npm run authz`)
 `scripts/check-authz.mjs` fails CI if any public `query`/`mutation`/`action`/`httpAction` export lacks an `// AUTH:` comment directly above it, or (unless it says `public` / `identity-only`) lacks a `requireUser/requireAdmin/requireToolOwner/requireLoanParty` call. It is a regex/paren-matching lint with documented limits (see the script header); it complements, not replaces, behavioural tests and review of `public` claims.
+
+## ADR-014: Approving a request auto-declines overlapping pending requests
+When an owner approves a loan, every other *pending* loan on the same tool whose date range overlaps (inclusive) is declined in the same transaction, each with a `request_declined` outbox event to its borrower. Leaving them pending would invite approvals that can only fail the overlap re-check, and would leave borrowers waiting on a request that can never succeed. Approval also re-checks overlap against other approved loans (race safety: Convex mutations are serializable) and rejects expired requests (`endDate` past, with the ADR-006 tolerance).
+
+## ADR-015: Only the owner can mark a loan returned
+`loans.markReturned` is owner-only (no borrower, no admin). The lender is the party who can verify the tool is back; letting a borrower self-certify would defeat overdue tracking. Admin intervention, if ever needed, would be an explicit audited internal function.
+
+## ADR-016: Tool removal is a soft delete that cancels pending requests
+`tools.remove` sets `status: "removed"` (+ `removedAt`, `removedBy`) instead of deleting, preserving loan history and audit references. It is blocked (CONFLICT) while any approved (unreturned) loan exists, and cancels all pending loans via the state machine actor `system`, emitting `request_cancelled` to each borrower. The logic lives in `convex/lib/toolRemoval.ts` so phase-5 admin removal reuses it (and adds the audit row). Removed tools are NOT_FOUND in `tools.get` even for the owner; owners see them via `tools.listMine` (flagged, `removedByAdmin`).
+
+## ADR-017: Loan date ranges overlap inclusively
+Both start and end days are "in use": a loan ending on the 12th conflicts with one starting on the 12th. Dates are whole calendar days, so there is no hand-over time within a day; allowing same-day turnover would need times. `rangesOverlap` in `convex/lib/dates.ts` is the single implementation.
+
+## ADR-018: `take()` caps instead of pagination (for now)
+List queries are bounded (tools 200, loans 100 per list, per-tool loan reads 100/200) so no query can scan unbounded data (API4). The MVP board is small enough that a cap is acceptable; production should move to `.paginate()` with cursors and a search index, and surface "showing newest N" in the UI until then. `listIncoming` reads up to 100 per status and merges, because `by_owner` sorts by status first.
+
+## ADR-019: Rate limits are indexed counts inside the mutation
+`loans.request` enforces max 5 pending requests per borrower (`by_borrower` + status) and max 10 requests per rolling hour (`by_borrower_created`; cancelled requests still count so cancel-spam cannot bypass it); `tools.create` caps 50 active tools per user. Counting inside the mutation is transactional (no race can exceed the cap) and needs no extra dependency, but it only limits business flows, not raw call volume or failed attempts. For production add `@convex-dev/rate-limiter` (token buckets per user/function, including failed calls). Values live in `LIMITS` (`convex/lib/validation.ts`).
+
+## ADR-020: Transactional outbox for loan events
+Every loan state change inserts an `automationEvents` row via `enqueueLoanEvent` in the same mutation (ids and type only, no PII). Phase 6 adds scheduling of the delivery action at the marked point. State machine: `convex/lib/loanStateMachine.ts`; derived display status (`active`/`overdue`) is computed at read time, never stored.
