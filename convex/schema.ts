@@ -71,6 +71,8 @@ export default defineSchema({
     status: automationStatusValidator,
     attempts: v.number(),
     lastErrorCode: v.optional(v.string()), // short code only; never payloads/PII
+    nextAttemptAt: v.optional(v.number()), // set while a retry is scheduled
+    deliveredAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -86,6 +88,16 @@ export default defineSchema({
   })
     .index("by_idempotencyKey", ["idempotencyKey"])
     .index("by_loan", ["loanId"]),
+
+  // Written by the n8n error workflow (POST /api/n8n/automation-events). Sanitized, truncated, email-redacted.
+  workflowErrors: defineTable({
+    workflowName: v.string(), // <= 100
+    executionId: v.string(), // <= 64
+    nodeName: v.optional(v.string()), // <= 100
+    message: v.string(), // <= 300
+    loanId: v.optional(v.id("loans")),
+    createdAt: v.number(),
+  }).index("by_createdAt", ["createdAt"]),
 
   auditLog: defineTable({
     actorId: v.optional(v.id("users")), // absent = system

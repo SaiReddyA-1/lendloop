@@ -1,4 +1,5 @@
 import type { Doc, Id } from "../_generated/dataModel";
+import { internal } from "../_generated/api";
 import type { MutationCtx } from "../_generated/server";
 
 /**
@@ -24,6 +25,7 @@ export async function enqueueLoanEvent(
     createdAt: now,
     updatedAt: now,
   });
-  // PHASE 6: schedule internal delivery action here (ctx.scheduler.runAfter(0, internal....deliver, { eventId: id }))
+  // Delivery runs after this transaction commits; the action retries with backoff (see notifications.ts).
+  await ctx.scheduler.runAfter(0, internal.notifications.deliver, { eventId: id });
   return id;
 }

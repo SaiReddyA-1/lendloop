@@ -21,6 +21,10 @@ const ROOT = join(process.cwd(), "convex");
 const BUILDER_RE = /^export\s+const\s+(\w+)\s*=\s*(query|mutation|action|httpAction)\s*\(/gm;
 const GUARD_RE = /\b(requireUser|requireAdmin|requireToolOwner|requireLoanParty)\s*\(/;
 
+// httpAction handlers must call authorizeInbound( (which must itself call verifyBearer( in the same file) or verifyBearer( directly.
+const HTTP_GUARD_RE = /\b(authorizeInbound|verifyBearer)\s*\(/;
+const AUTHORIZE_DEF_RE = /function\s+authorizeInbound\s*\([^)]*\)[^{]*\{[\s\S]*?verifyBearer\s*\(/;
+
 function walk(dir) {
   const out = [];
   for (const name of readdirSync(dir)) {
@@ -55,6 +59,10 @@ let checked = 0;
 for (const file of walk(ROOT)) {
   const src = readFileSync(file, "utf8");
   const lines = src.split("\n");
+  const usesAuthorizeInbound = /\bauthorizeInbound\s*\(/.test(src);
+  if (usesAuthorizeInbound && !AUTHORIZE_DEF_RE.test(src)) {
+    violations.push(`${relative(process.cwd(), file)}: authorizeInbound is used but not defined with a verifyBearer( call`);
+  }
   for (const m of src.matchAll(BUILDER_RE)) {
     checked++;
     const name = m[1];
@@ -73,6 +81,13 @@ for (const file of walk(ROOT)) {
     if (/^(public|identity-only)\b/i.test(decision)) continue;
 
     const block = extractBlock(src, m.index + m[0].length - 1);
+    if (m[2] === "httpAction") {
+      // HTTP actions authenticate with a bearer token, not a Clerk identity.
+      if (!HTTP_GUARD_RE.test(block)) {
+        violations.push(`${where}: AUTH says '${decision}' but no authorizeInbound( / verifyBearer( call found in the httpAction`);
+      }
+      continue;
+    }
     if (!GUARD_RE.test(block)) {
       violations.push(`${where}: AUTH says '${decision}' but no requireUser/requireAdmin/requireToolOwner/requireLoanParty call found`);
     }
