@@ -39,3 +39,17 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# --- LendLoop additions ---
+# env: ignore everything except templates
+!.env.example
+!convex.env.example
+convex.env
+convex.env.local
+# convex local deployment state
+/.convex/
+# n8n local data
+/n8n-data/
+/.n8n/
+/n8n/data/
+/n8n/.n8n/
