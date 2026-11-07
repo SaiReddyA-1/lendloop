@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 export function SiteHeader() {
   return (
     <header className="border-b bg-background">
-      <div className="mx-auto flex h-16 w-full max-w-5xl items-center justify-between px-4 sm:px-6">
+      <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4 sm:px-6">
         <Link href="/" className="text-xl font-semibold tracking-tight text-primary" aria-label="LendLoop home">
           LendLoop
         </Link>

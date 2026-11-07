@@ -1,14 +1,21 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
+import { PageHeader } from "@/components/page-header";
+import { ToolGridSkeleton } from "@/components/skeletons";
+import { ToolsBrowser } from "@/components/tools/tools-browser";
 
-export const metadata: Metadata = { title: "Dashboard" };
+export const metadata: Metadata = { title: "Browse tools" };
 
 export default function DashboardPage() {
   return (
-    <section className="space-y-4">
-      <h1 className="text-3xl font-semibold tracking-tight">Your dashboard</h1>
-      <p className="text-muted-foreground">
-        Your tools, borrow requests and loans will appear here.
-      </p>
-    </section>
+    <>
+      <PageHeader
+        title="Browse tools"
+        description="Everything your neighbors are happy to lend. Ask, pick your days, and pick it up."
+      />
+      <Suspense fallback={<ToolGridSkeleton />}>
+        <ToolsBrowser />
+      </Suspense>
+    </>
   );
 }

@@ -5,6 +5,7 @@ import "./globals.css";
 import { cn } from "@/lib/utils";
 import { ConvexClientProvider } from "@/components/providers/convex-client-provider";
 import { SiteHeader } from "@/components/site-header";
+import { SiteFooter } from "@/components/site-footer";
 import { Toaster } from "@/components/ui/sonner";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
@@ -32,9 +33,10 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               Skip to main content
             </a>
             <SiteHeader />
-            <main id="main" tabIndex={-1} className="mx-auto w-full max-w-5xl flex-1 px-4 py-10 sm:px-6">
+            <main id="main" tabIndex={-1} className="mx-auto w-full max-w-6xl flex-1 px-4 py-10 sm:px-6">
               {children}
             </main>
+            <SiteFooter />
             <Toaster />
           </ConvexClientProvider>
         </ClerkProvider>
