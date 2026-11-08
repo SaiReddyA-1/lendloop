@@ -88,7 +88,7 @@ export default async function HomePage() {
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {groups.map((group) => (
-                <div key={group.value} className="rounded-lg border bg-card p-5">
+                <div key={group.value} className="interactive-card rounded-lg border bg-card p-5">
                   <h3 className="flex items-center gap-2 text-sm font-semibold">
                     <CategoryIcon category={group.value} className="size-4 text-primary" />
                     {group.label}
@@ -96,7 +96,27 @@ export default async function HomePage() {
                   </h3>
                   <ul className="mt-3 space-y-1.5 text-sm">
                     {group.items.map((item, i) => (
-                      <li key={`${group.value}-${i}`}>{item.name}</li>
+                      <li key={`${group.value}-${i}`}>
+                        <Show when="signed-out">
+                          <SignInButton mode="modal">
+                            <button
+                              type="button"
+                              aria-label={`Sign in to borrow ${item.name}`}
+                              className="-mx-1 rounded px-1 text-left underline-offset-4 transition-colors duration-150 hover:text-primary hover:underline"
+                            >
+                              {item.name}
+                            </button>
+                          </SignInButton>
+                        </Show>
+                        <Show when="signed-in">
+                          <Link
+                            href="/dashboard"
+                            className="-mx-1 rounded px-1 underline-offset-4 transition-colors duration-150 hover:text-primary hover:underline"
+                          >
+                            {item.name}
+                          </Link>
+                        </Show>
+                      </li>
                     ))}
                   </ul>
                 </div>

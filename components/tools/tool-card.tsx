@@ -12,7 +12,7 @@ export type BoardTool = FunctionReturnType<typeof api.tools.list>[number];
 export function ToolCard({ tool }: { tool: BoardTool }) {
   const onLoan = tool.availability === "on_loan";
   return (
-    <li className="flex flex-col overflow-hidden rounded-lg border bg-card text-card-foreground">
+    <li className="interactive-card flex flex-col overflow-hidden rounded-lg border bg-card text-card-foreground">
       <ToolImage
         name={tool.name}
         category={tool.category}

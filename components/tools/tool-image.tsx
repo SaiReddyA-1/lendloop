@@ -30,6 +30,7 @@ export function ToolImage({
   const showPhoto = photoUrl !== null && photoUrl !== failedUrl;
   return (
     <div className={cn("relative overflow-hidden bg-surface", className)}>
+      <div className="card-media size-full">
       {showPhoto ? (
         // eslint-disable-next-line @next/next/no-img-element -- see ADR-043
         <img
@@ -45,6 +46,7 @@ export function ToolImage({
       ) : (
         <CategoryIllustration category={category} />
       )}
+      </div>
     </div>
   );
 }

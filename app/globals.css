@@ -200,3 +200,46 @@
 @theme inline {
   --color-primary-hover: var(--primary-hover);
 }
+
+/*
+ * interactive-card: one shared hover/focus treatment for cards that contain a real control.
+ * Lift is transform only (no layout shift). Hover is gated to devices that can hover; keyboard focus
+ * inside the card mirrors it. Reduced motion keeps the border and shadow change and drops the movement.
+ * `.card-media` children (tool images) zoom slightly inside an overflow-hidden frame.
+ */
+@layer components {
+  .interactive-card {
+    transition-property: transform, box-shadow, border-color, background-color;
+    transition-duration: 180ms;
+    transition-timing-function: cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  .interactive-card .card-media {
+    transition: transform 300ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  .interactive-card:focus-within {
+    border-color: rgb(241 100 63 / 0.4);
+    box-shadow: 0 8px 24px -12px rgb(22 24 28 / 0.18);
+  }
+  @media (hover: hover) {
+    .interactive-card:hover {
+      border-color: rgb(241 100 63 / 0.4);
+      box-shadow: 0 8px 24px -12px rgb(22 24 28 / 0.18);
+    }
+  }
+  @media (hover: hover) and (prefers-reduced-motion: no-preference) {
+    .interactive-card:hover {
+      transform: translateY(-2px);
+    }
+    .interactive-card:hover:active {
+      transform: translateY(0);
+    }
+    .interactive-card:hover .card-media {
+      transform: scale(1.03);
+    }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .interactive-card:focus-within {
+      transform: translateY(-2px);
+    }
+  }
+}
