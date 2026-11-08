@@ -1,6 +1,6 @@
 # End-to-end API test results
 
-Date: 2026-11-08. Script: `scripts/e2e/run-e2e.mjs` (node 24, no dependencies). Latest run: 74 PASS, 0 FAIL, 1 SKIP (step 10 n8n CLI part, see below). Emails captured by the SMTP sink in that run: 11.
+Date: 2026-11-08. Script: `scripts/e2e/run-e2e.mjs` (node 24, no dependencies). Latest run: 75 PASS, 0 FAIL, 0 SKIP. Emails captured by the SMTP sink in that run: 13. (An earlier run had 1 SKIP in step 10 because the temporary n8n install had been deleted from disk; after reinstalling n8n and re-provisioning it with `n8n/scripts/bootstrap.mjs`, every step passes.)
 
 Stack (all real, nothing mocked): local Convex anonymous deployment (`npx convex dev`, API 127.0.0.1:3210, HTTP actions 3211), n8n 2.46.6 (npm install, 3 published LendLoop workflows) on 127.0.0.1:5678, a Node SMTP capture sink on 127.0.0.1:1025 writing `.eml` files, `next dev` on :3000 with dummy Clerk keys. Convex functions are called AS a user through `npx convex run --identity` (fresh test identities with issuer `https://e2e.local`), so every authorization check runs the real server code path.
 
@@ -15,7 +15,7 @@ Stack (all real, nothing mocked): local Convex anonymous deployment (`npx convex
 | 7 | Return, invalid transitions | PASS | borrower "marked as returned" email; return twice and approve returned: `INVALID_TRANSITION` |
 | 8 | Borrower cancel | PASS | owner "was cancelled" email; owner calling borrower-only cancel: `NOT_FOUND` |
 | 9 | Admin moderation | PASS | non-admin `listLoans`/`removeTool`: `FORBIDDEN`; `setTrustedLender` writes `user.trusted.grant` audit row; self-trust `FORBIDDEN`; `removeTool` cancelled 1 pending loan, borrower email, tool gone from `listPublic`, `tool.remove` audit row with reason |
-| 10 | Overdue reminders (WF2) | SKIP (n8n CLI) / PASS (10b) | `n8n execute --id=lendloopWf02` could not run: the n8n package directory in the scratchpad runtime had been deleted from disk (only `isolated-vm` and `sqlite3` remain), while the running instance kept serving. Fallback 10b exercised the Convex side that WF2 calls: `overdue-loans` returned the 2 seeded overdue loans (Pressure washer, Carpet cleaner), 2 reminders recorded (201 each, +2 rows), second call returned 0 loans. WF2 email composition and the SMTP send for reminders were NOT verified in this run (they were verified in `n8n/E2E-RESULTS.md` scenario 5) |
+| 10 | Overdue reminders (WF2) | PASS | `n8n execute --id=lendloopWf02` exit 0; 2 reminder emails captured (Pressure washer 130 bar, Carpet cleaner); +2 Convex `reminders` rows; second run idempotent (rows 3 to 3, emails 2 to 2) |
 | 11 | Inbound HTTP security | PASS | no or wrong token: 401; valid: 200; duplicate reminder POST: 200 `duplicate`; 20 KB body: 413; bad body: 400; POST health and PUT overdue-loans: 405 |
 | 12 | Webhook security (direct to n8n) | PASS | valid signed event 200 `delivered` and email; replay same eventId 200 `duplicate`, no second email; bad signature 401; timestamp -400 s 401; no email for rejected events |
 | 13 | Error path | PASS | unsupported `eventType` gave n8n 500; admin alert email "[LendLoop] n8n workflow failed: ..." captured; `admin:listWorkflowErrors` gained a row (1 to 2); non-admin gets `FORBIDDEN` |
