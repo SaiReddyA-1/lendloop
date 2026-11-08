@@ -15,6 +15,8 @@ import { useMutationWithToast } from "@/hooks/use-mutation-with-toast";
 import { CategoryIcon } from "@/components/category-icon";
 import { formatRange } from "@/lib/dates";
 import { ConfirmButton } from "./confirm-button";
+import { useLoanAutomation } from "@/hooks/use-loan-automation";
+import { AutomationTimeline } from "./automation-timeline";
 import { StatusBadge } from "./status-badge";
 
 export type MyRequest = FunctionReturnType<typeof api.loans.listMyRequests>[number];
@@ -82,7 +84,7 @@ export function RequestsList({
                   <TableRow key={loan._id}>
                     <TableCell>
                       <ToolName loan={loan} />
-                      {footer ? <div className="mt-2">{footer}</div> : null}
+                      {footer ? <div className="mt-2 [&:empty]:hidden">{footer}</div> : null}
                     </TableCell>
                     <TableCell>{loan.ownerName}</TableCell>
                     <TableCell className="whitespace-nowrap">
@@ -130,6 +132,7 @@ export function RequestsList({
 
 export function MyRequests() {
   const loans = useQuery(api.loans.listMyRequests);
+  const eventsFor = useLoanAutomation(loans);
   return (
     <>
       <PageHeader
@@ -150,7 +153,10 @@ export function MyRequests() {
           }
         />
       ) : (
-        <RequestsList loans={loans} />
+        <RequestsList
+          loans={loans}
+          renderFooter={(loan) => <AutomationTimeline events={eventsFor(loan._id)} />}
+        />
       )}
     </>
   );

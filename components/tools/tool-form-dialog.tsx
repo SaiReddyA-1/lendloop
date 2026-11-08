@@ -62,8 +62,17 @@ export type EditableTool = {
 };
 
 /** Create (no `tool`) or edit (prefilled) dialog; `trigger` is the opening button. */
-export function ToolFormDialog({ tool, trigger }: { tool?: EditableTool; trigger: ReactNode }) {
-  const [open, setOpen] = useState(false);
+export function ToolFormDialog({
+  tool,
+  trigger,
+  defaultOpen = false,
+}: {
+  tool?: EditableTool;
+  trigger: ReactNode;
+  /** Opens on mount (dev preview only). */
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
   const editing = tool !== undefined;
   const idBase = tool?._id ?? "new";
 

@@ -24,3 +24,13 @@ export function formatRange(start: string, end: string): string {
   const withYear = !start.startsWith(thisYear) || !end.startsWith(thisYear);
   return start === end ? fmt(start, withYear) : `${fmt(start, withYear)} \u2013 ${fmt(end, withYear)}`;
 }
+
+/** "Nov 8, 2026, 14:05" from an epoch-ms timestamp (local time). */
+export function formatDateTime(ts: number): string {
+  return format(new Date(ts), "MMM d, yyyy, HH:mm");
+}
+
+/** "Nov 8, 2026" from an epoch-ms timestamp (local time). */
+export function formatDay(ts: number): string {
+  return format(new Date(ts), "MMM d, yyyy");
+}

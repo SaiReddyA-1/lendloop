@@ -17,6 +17,7 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
+  devIndicators: false, // hides the dev overlay badge (e.g. in design-review screenshots)
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

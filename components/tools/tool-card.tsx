@@ -1,7 +1,7 @@
 import type { FunctionReturnType } from "convex/server";
-import { ShieldCheck } from "lucide-react";
 import type { api } from "@/convex/_generated/api";
 import { CategoryIcon } from "@/components/category-icon";
+import { TrustedBadge } from "@/components/trusted-badge";
 import { categoryLabel, conditionLabel } from "@/lib/categories";
 import { cn } from "@/lib/utils";
 import { RequestDialog } from "./request-dialog";
@@ -28,12 +28,7 @@ export function ToolCard({ tool }: { tool: BoardTool }) {
           <span className="text-muted-foreground">Lent by </span>
           <span className="font-medium">{tool.isMine ? "you" : tool.ownerName}</span>
         </span>
-        {tool.ownerTrustedLender ? (
-          <span className="inline-flex items-center gap-1 rounded-full bg-status-ok px-2 py-0.5 text-xs font-medium text-status-ok-foreground">
-            <ShieldCheck className="size-3.5" aria-hidden="true" />
-            Trusted Lender
-          </span>
-        ) : null}
+        {tool.ownerTrustedLender ? <TrustedBadge /> : null}
       </div>
       <div className="mt-5 flex items-center justify-between gap-3 border-t pt-4">
         <span

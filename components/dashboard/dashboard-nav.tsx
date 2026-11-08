@@ -38,7 +38,7 @@ export function DashboardNav() {
                 className={cn(
                   "inline-flex min-h-10 items-center gap-2 border-b-2 px-3 text-sm font-medium transition-colors",
                   current
-                    ? "border-primary text-foreground"
+                    ? "border-brand text-foreground"
                     : "border-transparent text-muted-foreground hover:text-foreground",
                 )}
               >

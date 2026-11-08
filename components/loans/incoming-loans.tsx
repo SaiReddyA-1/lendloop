@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
-import { Inbox, ShieldCheck } from "lucide-react";
+import { Inbox } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
@@ -13,6 +13,9 @@ import { formatRange } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { ActionButton } from "./action-button";
 import { ConfirmButton } from "./confirm-button";
+import { useLoanAutomation } from "@/hooks/use-loan-automation";
+import { TrustedBadge } from "@/components/trusted-badge";
+import { AutomationTimeline } from "./automation-timeline";
 import { StatusBadge } from "./status-badge";
 
 export type IncomingLoan = FunctionReturnType<typeof api.loans.listIncoming>[number];
@@ -85,12 +88,7 @@ function IncomingRow({
             <span>
               {loan.borrowerName} &middot; {formatRange(loan.startDate, loan.endDate)}
             </span>
-            {loan.borrowerTrustedLender ? (
-              <span className="inline-flex items-center gap-1 text-status-ok-foreground">
-                <ShieldCheck className="size-3.5" aria-hidden="true" />
-                Trusted Lender
-              </span>
-            ) : null}
+            {loan.borrowerTrustedLender ? <TrustedBadge /> : null}
           </p>
           {overdue ? (
             <p className="text-sm font-medium text-status-bad-foreground">
@@ -137,9 +135,41 @@ function Section({
 
 const rank = (l: IncomingLoan) => (l.displayStatus === "overdue" ? 0 : l.displayStatus === "active" ? 1 : 2);
 
-/** `renderFooter` is the slot for the phase 6 automation timeline, shown under each loan. */
-export function IncomingLoans({ renderFooter }: { renderFooter?: (loan: IncomingLoan) => ReactNode }) {
+/** Presentational sections (also used by the dev preview). */
+export function IncomingSections({
+  loans,
+  renderFooter,
+}: {
+  loans: IncomingLoan[];
+  renderFooter?: (loan: IncomingLoan) => ReactNode;
+}) {
+  return (
+    <div className="space-y-10">
+      <Section
+        title="Needs your decision"
+        hint="Approve or decline. Approving declines overlapping requests for you."
+        loans={loans.filter((l) => l.status === "pending")}
+        renderFooter={renderFooter}
+      />
+      <Section
+        title="On loan"
+        hint="Out with a neighbor or coming up. Mark it returned when it's back."
+        loans={loans.filter((l) => l.status === "approved").sort((a, b) => rank(a) - rank(b))}
+        renderFooter={renderFooter}
+      />
+      <Section
+        title="History"
+        hint="Finished, declined and cancelled requests."
+        loans={loans.filter((l) => l.status !== "pending" && l.status !== "approved")}
+        renderFooter={renderFooter}
+      />
+    </div>
+  );
+}
+
+export function IncomingLoans() {
   const loans = useQuery(api.loans.listIncoming);
+  const eventsFor = useLoanAutomation(loans);
 
   return (
     <>
@@ -156,26 +186,12 @@ export function IncomingLoans({ renderFooter }: { renderFooter?: (loan: Incoming
           hint="When a neighbor asks to borrow one of your tools, you'll decide here."
         />
       ) : (
-        <div className="space-y-10">
-          <Section
-            title="Needs your decision"
-            hint="Approve or decline. Approving declines overlapping requests for you."
-            loans={loans.filter((l) => l.status === "pending")}
-            renderFooter={renderFooter}
-          />
-          <Section
-            title="On loan"
-            hint="Out with a neighbor or coming up. Mark it returned when it's back."
-            loans={loans.filter((l) => l.status === "approved").sort((a, b) => rank(a) - rank(b))}
-            renderFooter={renderFooter}
-          />
-          <Section
-            title="History"
-            hint="Finished, declined and cancelled requests."
-            loans={loans.filter((l) => l.status !== "pending" && l.status !== "approved")}
-            renderFooter={renderFooter}
-          />
-        </div>
+        <IncomingSections
+          loans={loans}
+          renderFooter={(loan) => (
+            <AutomationTimeline events={eventsFor(loan._id)} className="mt-3 border-t pt-3" />
+          )}
+        />
       )}
     </>
   );

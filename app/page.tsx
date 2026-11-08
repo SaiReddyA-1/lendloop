@@ -3,6 +3,7 @@ import { fetchQuery } from "convex/nextjs";
 import { ArrowRight, CalendarDays, HandHelping, PackageSearch, Wrench } from "lucide-react";
 import Link from "next/link";
 import { api } from "@/convex/_generated/api";
+import { Logo } from "@/components/logo";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { CategoryIcon } from "@/components/category-icon";
@@ -35,12 +36,13 @@ export default async function HomePage() {
 
   return (
     <>
-      <section aria-labelledby="hero-title" className="max-w-3xl space-y-6 py-6 sm:py-12">
+      <div className="-mx-4 mb-4 bg-surface px-4 sm:-mx-6 sm:px-6">
+      <section aria-labelledby="hero-title" className="max-w-3xl space-y-6 py-10 sm:py-16">
         <h1
           id="hero-title"
-          className="text-5xl font-semibold tracking-tight text-balance text-primary sm:text-6xl"
+          className="font-display text-6xl font-normal tracking-tight text-balance sm:text-7xl"
         >
-          LendLoop
+          <Logo size="lg" />
         </h1>
         <p className="text-2xl font-medium tracking-tight text-balance sm:text-3xl">
           Borrow what you need. Lend what you don&apos;t.
@@ -67,6 +69,7 @@ export default async function HomePage() {
           </Show>
         </div>
       </section>
+      </div>
 
       <section aria-labelledby="available-tools" className="mt-12 space-y-6">
         <h2 id="available-tools" className="text-2xl font-semibold tracking-tight">

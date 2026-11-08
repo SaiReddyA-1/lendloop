@@ -29,8 +29,8 @@ export function CategoryFilter({ value, onChange }: Props) {
             className={cn(
               "inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium transition-colors",
               pressed
-                ? "border-primary bg-primary text-primary-foreground"
-                : "bg-card text-foreground hover:bg-accent",
+                ? "border-brand bg-brand-soft text-foreground ring-1 ring-brand"
+                : "border-input bg-card text-foreground hover:bg-accent",
             )}
           >
             {option.value === undefined ? null : (
