@@ -53,7 +53,8 @@ services:
       mailpit:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:5678/healthz >/dev/null 2>&1 || exit 1"]
+      # The n8n 2.x image ships without wget/curl; node is always present. /healthz returns {"status":"ok"}.
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5678/healthz').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
       interval: 15s
       timeout: 5s
       retries: 10
@@ -78,7 +79,10 @@ services:
 
 secrets:
   n8n_encryption_key:
-    file: ./secrets/n8n_encryption_key # git-ignored; must be readable by the container user (uid 1000)
+    # git-ignored. The file is bind-mounted with its host owner/mode and must be readable by the container
+    # user `node` (uid 1000): on Linux run `chmod 644 secrets/n8n_encryption_key` (it is only a local dev key).
+    # Docker Desktop (Windows/macOS) maps host files readable by default.
+    file: ./secrets/n8n_encryption_key
 
 volumes:
   n8n_data:
