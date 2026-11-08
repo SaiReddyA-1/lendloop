@@ -66,4 +66,3 @@ convex.env.local
 /skills-lock.json
 
 .vercel
-.env*
