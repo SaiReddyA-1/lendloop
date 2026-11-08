@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "e2e:api": "node scripts/e2e/run-e2e.mjs",
     "authz": "node scripts/check-authz.mjs",
     "authz:selftest": "node scripts/authz-selftest.mjs",
     "lint:dashes": "node scripts/check-no-dashes.mjs",
