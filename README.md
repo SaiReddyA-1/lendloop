@@ -6,18 +6,19 @@ LendLoop is a neighborhood tool-lending board. Neighbors list tools they are wil
 
 ## Live demo for reviewers
 
-> TODO: fill in after the first deploy (placeholders only; no URLs are live yet).
+- **App:** https://lendloop-sepia.vercel.app (seeded with 8 neighbors, 26 tools and loans in every state)
+- **Email inbox (Mailpit):** https://mailpit-production-1766.up.railway.app (user `reviewer`; the password is shared privately with reviewers, never in this repo). Every notification n8n sends lands here.
+- **Sign up:** any email works. Addresses containing `+clerk_test` (for example `you+clerk_test@example.com`) accept the verification code `424242`, so you can create two accounts and borrow between them. (Clerk development instance: a small banner shows and a 100-user cap applies.)
+- **Try this:** sign up, request a tool on Browse, then open the Mailpit inbox and see the owner's "New borrow request" email arrive within seconds.
+- **n8n editor:** private to the owner (not shared). Workflows are exported in [n8n/workflows](n8n/workflows).
 
-- App: TODO (Vercel URL, `https://<project>.vercel.app`)
-- Email inbox (Mailpit): TODO (Railway URL); the password is shared privately, never in this repo
-- Sign up: any email works; addresses with `+clerk_test` accept the code `424242` (Clerk development instance, banner and 100-user cap apply)
-- n8n editor: private to the owner (not shared)
+Verified on the live deployment: 9/9 production smoke checks (`node scripts/deploy/smoke-prod.mjs`) and a real sign-in, borrow and cancel flow with both emails delivered to the hosted inbox.
 
 How it is deployed, the environment matrix, secret rotation and known limits: [docs/DEPLOY.md](docs/DEPLOY.md).
 
 | Doc | What is in it |
 |---|---|
-| [docs/DECISIONS.md](docs/DECISIONS.md) | 29 architecture decision records (ADR-001..029) |
+| [docs/DECISIONS.md](docs/DECISIONS.md) | 50 architecture decision records (ADR-001..050) |
 | [docs/SECURITY.md](docs/SECURITY.md) | Security controls map with status and evidence |
 | [docs/DEPLOY.md](docs/DEPLOY.md) | Runbook for the Vercel, Convex, Railway reviewer demo deployment |
 | [docs/PRODUCTION.md](docs/PRODUCTION.md) | What must change before production |
