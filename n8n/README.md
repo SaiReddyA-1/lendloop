@@ -50,6 +50,8 @@ export N8N_USER_FOLDER=... NODE_FUNCTION_ALLOW_BUILTIN=crypto N8N_BLOCK_ENV_ACCE
        LENDLOOP_MAIL_FROM="LendLoop <noreply@example.com>" LENDLOOP_ADMIN_ALERT_EMAIL=admin@example.com
 export LENDLOOP_INBOUND_TOKEN=... SMTP_HOST=127.0.0.1 SMTP_PORT=1025
 N8N_CMD="npx n8n" ./n8n/scripts/bootstrap.sh --local     # or .\n8n\scripts\bootstrap.ps1 -Local (run from the n8n install folder)
+# If any path contains spaces, use N8N_BIN instead (runs n8n with node, no shell):
+#   N8N_BIN="/path/to/n8n-install/node_modules/n8n/bin/n8n" node n8n/scripts/bootstrap.mjs
 npx n8n start
 ```
 
