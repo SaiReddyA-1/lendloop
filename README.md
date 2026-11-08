@@ -37,6 +37,7 @@ LendLoop is a neighborhood tool-lending board. Neighbors list tools they are wil
 
 **Key features**
 
+- Tool photos: owners can upload one optional photo per tool (JPG, PNG or WebP, up to 2 MB, validated server-side); tools without one show a category illustration.
 - Tool board with category filter, owner "trusted lender" badge, booked date ranges on each tool.
 - Loan lifecycle with a single state machine; approving a request auto-declines overlapping pending requests (ADR-014).
 - Transactional outbox: every state change writes an event in the same transaction; delivery to n8n is retried with backoff.
@@ -50,6 +51,8 @@ LendLoop is a neighborhood tool-lending board. Neighbors list tools they are wil
 ![Public landing page](docs/screenshots/public-desktop.png)
 
 ![Dashboard (dev preview, fixture data)](docs/screenshots/preview-desktop.png)
+
+![Tool cards with category illustrations and one photo](docs/screenshots/cards-desktop.png)
 
 ![Admin console (dev preview, fixture data)](docs/screenshots/preview-admin-desktop.png)
 

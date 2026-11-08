@@ -32,6 +32,14 @@ export default clerkMiddleware(
           // Local Convex dev deployment (anonymous/local backend).
           ...(process.env.NODE_ENV !== "production" ? ["http://127.0.0.1:*", "ws://127.0.0.1:*"] : []),
         ],
+        // Tool photos are served from the Convex storage origin; blob: is the local preview of a chosen file.
+        "img-src": [
+          "'self'",
+          "data:",
+          "blob:",
+          "https://*.convex.cloud",
+          ...(process.env.NODE_ENV !== "production" ? ["http://127.0.0.1:*"] : []),
+        ],
         "frame-ancestors": ["'none'"],
         "object-src": ["'none'"],
         "base-uri": ["'self'"],

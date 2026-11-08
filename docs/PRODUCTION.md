@@ -55,3 +55,6 @@ What I would change before real users, in priority order. Each item says why. "T
 5. Remove the old value, record the rotation in the audit/ops log.
 
 Clerk keys: roll in the Clerk dashboard, update Vercel env, redeploy. The n8n encryption key cannot be rotated in place: re-export credentials, set the new key on a fresh instance, re-run the bootstrap.
+
+## Tool photo hardening
+Photos are type, size and magic-byte checked but not re-encoded: add EXIF/GPS stripping and re-encoding (or a malware scan) before opening uploads to untrusted users, and consider a per-user storage quota (see ADR-040).

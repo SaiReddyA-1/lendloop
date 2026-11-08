@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600">
+  <defs>
+    <linearGradient id="wall" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6b7a86"/>
+      <stop offset="1" stop-color="#8e9aa3"/>
+    </linearGradient>
+    <linearGradient id="floor" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#b8b2a6"/>
+      <stop offset="1" stop-color="#8f897d"/>
+    </linearGradient>
+    <linearGradient id="body" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2e8bd6"/>
+      <stop offset="1" stop-color="#1b5a94"/>
+    </linearGradient>
+    <radialGradient id="vignette" cx="0.5" cy="0.5" r="0.75">
+      <stop offset="0.55" stop-color="#000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0.35"/>
+    </radialGradient>
+    <filter id="soft"><feGaussianBlur stdDeviation="14"/></filter>
+    <filter id="shadow"><feGaussianBlur stdDeviation="10"/></filter>
+  </defs>
+  <rect width="800" height="380" fill="url(#wall)"/>
+  <rect y="380" width="800" height="220" fill="url(#floor)"/>
+  <g filter="url(#soft)" opacity="0.55">
+    <rect x="40" y="90" width="160" height="200" fill="#4a5660"/>
+    <rect x="600" y="60" width="150" height="240" fill="#a9b3ba"/>
+    <circle cx="540" cy="150" r="46" fill="#d6c9a5"/>
+  </g>
+  <ellipse cx="400" cy="500" rx="220" ry="30" fill="#000" opacity="0.35" filter="url(#shadow)"/>
+  <g>
+    <rect x="262" y="250" width="276" height="230" rx="36" fill="url(#body)"/>
+    <rect x="282" y="270" width="236" height="46" rx="18" fill="#ffffff" opacity="0.18"/>
+    <rect x="330" y="330" width="140" height="70" rx="12" fill="#14181c"/>
+    <circle cx="370" cy="365" r="16" fill="#f4c542"/>
+    <circle cx="430" cy="365" r="16" fill="#c9d1d8"/>
+    <rect x="262" y="440" width="276" height="40" rx="20" fill="#10161b" opacity="0.5"/>
+    <circle cx="300" cy="500" r="42" fill="#15191d"/>
+    <circle cx="300" cy="500" r="18" fill="#7d868d"/>
+    <circle cx="500" cy="500" r="42" fill="#15191d"/>
+    <circle cx="500" cy="500" r="18" fill="#7d868d"/>
+    <path d="M538 300 C640 300 650 400 600 470" fill="none" stroke="#1b1f23" stroke-width="16" stroke-linecap="round"/>
+    <path d="M600 470 L650 430 L700 360" fill="none" stroke="#f4c542" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <rect width="800" height="600" fill="url(#vignette)"/>
+</svg>

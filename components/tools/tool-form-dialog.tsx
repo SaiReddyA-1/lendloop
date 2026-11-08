@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useMutationWithToast } from "@/hooks/use-mutation-with-toast";
+import { useToolPhotoSync } from "@/hooks/use-tool-photo-sync";
 import {
   CATEGORIES,
   CATEGORY_VALUES,
@@ -37,6 +38,7 @@ import {
   type CategoryValue,
   type ConditionValue,
 } from "@/lib/categories";
+import { PhotoField } from "./photo-field";
 
 // Client limits come from the same constants the server enforces.
 const schema = z.object({
@@ -59,6 +61,7 @@ export type EditableTool = {
   category: CategoryValue;
   condition: ConditionValue;
   description: string;
+  photoUrl?: string | null;
 };
 
 /** Create (no `tool`) or edit (prefilled) dialog; `trigger` is the opening button. */
@@ -73,6 +76,8 @@ export function ToolFormDialog({
   defaultOpen?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoRemoved, setPhotoRemoved] = useState(false);
   const editing = tool !== undefined;
   const idBase = tool?._id ?? "new";
 
@@ -95,17 +100,25 @@ export function ToolFormDialog({
 
   const create = useMutationWithToast(api.tools.create, { success: "Tool listed. Thanks for lending!" });
   const update = useMutationWithToast(api.tools.update, { success: "Changes saved" });
-  const pending = create.pending || update.pending;
+  const photos = useToolPhotoSync();
+  const pending = create.pending || update.pending || photos.pending;
   const length = useWatch({ control, name: "description" })?.length ?? 0;
+  const watchedName = useWatch({ control, name: "name" }) ?? "";
+  const watchedCategory = useWatch({ control, name: "category" }) ?? "other";
 
   const onSubmit = handleSubmit(async (values) => {
-    const ok = tool
-      ? await update.run({ toolId: tool._id, ...values })
-      : await create.run(values);
-    if (ok) {
-      setOpen(false);
-      if (!tool) reset({ name: "", description: "" });
+    let toolId: Id<"tools"> | null = null;
+    if (tool) {
+      if (await update.run({ toolId: tool._id, ...values })) toolId = tool._id;
+    } else {
+      const created = await create.call(values);
+      if (created.ok) toolId = created.value;
     }
+    if (toolId === null) return;
+    // The tool is saved at this point; a photo problem is toasted and can be retried via Edit.
+    await photos.sync(toolId, { file: photoFile, remove: photoRemoved });
+    setOpen(false);
+    if (!tool) reset({ name: "", description: "" });
   });
 
   return (
@@ -113,7 +126,11 @@ export function ToolFormDialog({
       open={open}
       onOpenChange={(o) => {
         setOpen(o);
-        if (o) reset(initial);
+        if (o) {
+          reset(initial);
+          setPhotoFile(null);
+          setPhotoRemoved(false);
+        }
       }}
     >
       <DialogTrigger asChild>{trigger}</DialogTrigger>
@@ -242,6 +259,17 @@ export function ToolFormDialog({
               </p>
             ) : null}
           </div>
+
+          <PhotoField
+            name={watchedName}
+            category={watchedCategory}
+            currentUrl={tool?.photoUrl ?? null}
+            file={photoFile}
+            removed={photoRemoved}
+            disabled={pending}
+            onFileChange={setPhotoFile}
+            onRemovedChange={setPhotoRemoved}
+          />
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={pending}>

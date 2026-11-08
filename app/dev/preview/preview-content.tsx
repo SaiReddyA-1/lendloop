@@ -48,13 +48,24 @@ function Block({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-export function PreviewContent({ dialog }: { dialog?: string }) {
+export function PreviewContent({ dialog, section }: { dialog?: string; section?: string }) {
   const [showRemoved, setShowRemoved] = useState(true);
   const [filter, setFilter] = useState<LoanFilter>("all");
   const loansShown = filter === "all" ? adminLoans : adminLoans.filter((l) => l.status === filter);
   const toolsShown = showRemoved ? adminTools : adminTools.filter((t) => t.status === "active");
   const drill = adminTools[0]!;
   const target = adminUsers[1]!;
+
+  if (section === "cards") {
+    // Design-review shortcut (?section=cards): only the tool cards, used for the docs screenshots.
+    return (
+      <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {boardTools.map((t) => (
+          <ToolCard key={t._id} tool={t} />
+        ))}
+      </ul>
+    );
+  }
 
   return (
     <div className="space-y-14">

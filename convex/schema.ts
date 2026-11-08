@@ -34,6 +34,8 @@ export default defineSchema({
     category: categoryValidator,
     condition: conditionValidator,
     description: v.string(),
+    // Optional owner photo (Convex file storage). Validated in toolPhotos.attachPhoto; deleted with the tool.
+    photoId: v.optional(v.id("_storage")),
     status: toolStatusValidator,
     removedAt: v.optional(v.number()),
     removedBy: v.optional(v.id("users")),
@@ -45,7 +47,17 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_status_category", ["status", "category"])
     .index("by_owner", ["ownerId", "status"])
-    .index("by_owner_created", ["ownerId", "createdAt"]),
+    .index("by_owner_created", ["ownerId", "createdAt"])
+    // Orphan cleanup and "is this file already attached" checks (toolPhotos.ts).
+    .index("by_photoId", ["photoId"]),
+
+  // One row per issued upload URL: the rate-limit ledger for toolPhotos.generateUploadUrl. Trimmed by the orphan cron.
+  uploadIntents: defineTable({
+    userId: v.id("users"),
+    createdAt: v.number(),
+  })
+    .index("by_user_created", ["userId", "createdAt"])
+    .index("by_createdAt", ["createdAt"]),
 
   loans: defineTable({
     toolId: v.id("tools"),

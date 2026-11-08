@@ -9,9 +9,9 @@ export const metadata: Metadata = { title: "Dev preview", robots: { index: false
 export default async function PreviewPage({
   searchParams,
 }: {
-  searchParams: Promise<{ dialog?: string }>;
+  searchParams: Promise<{ dialog?: string; section?: string }>;
 }) {
   if (process.env.NODE_ENV === "production") notFound();
-  const { dialog } = await searchParams;
-  return <PreviewContent dialog={dialog} />;
+  const { dialog, section } = await searchParams;
+  return <PreviewContent dialog={dialog} section={section} />;
 }

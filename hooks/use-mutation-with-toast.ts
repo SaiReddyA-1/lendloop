@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { useMutation } from "convex/react";
-import type { FunctionArgs, FunctionReference } from "convex/server";
+import type { FunctionArgs, FunctionReference, FunctionReturnType } from "convex/server";
 import { toast } from "sonner";
 import { toErrorMessage } from "@/lib/errors";
 
@@ -24,23 +24,25 @@ export function useMutationWithToast<M extends FunctionReference<"mutation">>(
   const [pending, setPending] = useState(false);
   const { success } = options;
 
-  const run = useCallback(
-    async (args: FunctionArgs<M>): Promise<boolean> => {
+  /** Like `run` but keeps the mutation result (e.g. a new document id). `ok: false` means a toast was shown. */
+  const call = useCallback(
+    async (args: FunctionArgs<M>): Promise<{ ok: true; value: FunctionReturnType<M> } | { ok: false }> => {
       setPending(true);
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (mutate as any)(args);
+        const value = await (mutate as any)(args);
         toast.success(typeof success === "function" ? success(args) : success);
-        return true;
+        return { ok: true, value };
       } catch (e) {
         toast.error(toErrorMessage(e));
-        return false;
+        return { ok: false };
       } finally {
         setPending(false);
       }
     },
     [mutate, success],
   );
+  const run = useCallback(async (args: FunctionArgs<M>): Promise<boolean> => (await call(args)).ok, [call]);
 
-  return { run, pending };
+  return { run, call, pending };
 }

@@ -15,6 +15,7 @@ import { CategoryIcon } from "@/components/category-icon";
 import { categoryLabel, conditionLabel } from "@/lib/categories";
 import { cn } from "@/lib/utils";
 import { ToolFormDialog } from "./tool-form-dialog";
+import { ToolImage } from "./tool-image";
 
 type MyTool = FunctionReturnType<typeof api.tools.listMine>[number];
 
@@ -30,7 +31,13 @@ function ListingRow({ tool }: { tool: MyTool }) {
       )}
     >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0 space-y-2">
+        <ToolImage
+          name={tool.name}
+          category={tool.category}
+          photoUrl={tool.photoUrl}
+          className={cn("aspect-[4/3] w-full shrink-0 rounded-md sm:w-32", removed && "opacity-60 grayscale")}
+        />
+        <div className="min-w-0 flex-1 space-y-2">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
             <span className="inline-flex items-center gap-1.5">
               <CategoryIcon category={tool.category} className="size-4" />

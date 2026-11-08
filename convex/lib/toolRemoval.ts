@@ -54,8 +54,11 @@ export async function removeToolAndCancelPending(
     status: "removed",
     removedAt: now,
     removedBy,
+    // The photo belongs to the active listing; drop the file so removed tools keep no uploaded media.
+    photoId: undefined,
     updatedAt: now,
   });
+  if (tool.photoId) await ctx.storage.delete(tool.photoId);
   const { cancelled, hasMore } = await cancelPendingForTool(ctx, tool._id);
   if (hasMore) {
     await ctx.scheduler.runAfter(0, internal.maintenance.continueToolRemoval, { toolId: tool._id });

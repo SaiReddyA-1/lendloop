@@ -19,6 +19,7 @@ import type * as lib_dates from "../lib/dates.js";
 import type * as lib_env from "../lib/env.js";
 import type * as lib_errors from "../lib/errors.js";
 import type * as lib_hmac from "../lib/hmac.js";
+import type * as lib_imageSniff from "../lib/imageSniff.js";
 import type * as lib_loanStateMachine from "../lib/loanStateMachine.js";
 import type * as lib_notify from "../lib/notify.js";
 import type * as lib_toolRemoval from "../lib/toolRemoval.js";
@@ -27,6 +28,7 @@ import type * as loans from "../loans.js";
 import type * as maintenance from "../maintenance.js";
 import type * as notifications from "../notifications.js";
 import type * as seed from "../seed.js";
+import type * as toolPhotos from "../toolPhotos.js";
 import type * as tools from "../tools.js";
 import type * as users from "../users.js";
 
@@ -48,6 +50,7 @@ declare const fullApi: ApiFromModules<{
   "lib/env": typeof lib_env;
   "lib/errors": typeof lib_errors;
   "lib/hmac": typeof lib_hmac;
+  "lib/imageSniff": typeof lib_imageSniff;
   "lib/loanStateMachine": typeof lib_loanStateMachine;
   "lib/notify": typeof lib_notify;
   "lib/toolRemoval": typeof lib_toolRemoval;
@@ -56,6 +59,7 @@ declare const fullApi: ApiFromModules<{
   maintenance: typeof maintenance;
   notifications: typeof notifications;
   seed: typeof seed;
+  toolPhotos: typeof toolPhotos;
   tools: typeof tools;
   users: typeof users;
 }>;

@@ -23,6 +23,7 @@ import { Label } from "@/components/ui/label";
 import { useMutationWithToast } from "@/hooks/use-mutation-with-toast";
 import { daysInclusive, formatRange, isValidIso, todayIso } from "@/lib/dates";
 import type { BoardTool } from "./tool-card";
+import { ToolImage } from "./tool-image";
 
 type Booked = { startDate: string; endDate: string }[];
 
@@ -99,6 +100,13 @@ export function RequestDialog({ tool }: { tool: BoardTool }) {
               {LIMITS.MAX_LOAN_DAYS} days).
             </DialogDescription>
           </DialogHeader>
+
+          <ToolImage
+            name={tool.name}
+            category={tool.category}
+            photoUrl={tool.photoUrl}
+            className="aspect-[4/3] max-h-48 w-full rounded-md border"
+          />
 
           <div aria-live="polite">
             {booked === undefined ? (

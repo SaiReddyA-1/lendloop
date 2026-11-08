@@ -26,6 +26,7 @@ const toolItemValidator = v.object({
   description: v.string(),
   ownerName: v.string(),
   ownerTrustedLender: v.boolean(),
+  photoUrl: v.union(v.string(), v.null()),
   isMine: v.boolean(),
   availability: v.union(v.literal("available"), v.literal("on_loan")),
 });
@@ -67,6 +68,7 @@ async function projectTool(
     description: tool.description,
     ownerName: owner?.name ?? "Neighbor",
     ownerTrustedLender: owner?.trustedLender ?? false,
+    photoUrl: tool.photoId ? await ctx.storage.getUrl(tool.photoId) : null,
     isMine: tool.ownerId === me._id,
     availability: (await isOnLoanToday(ctx, tool._id, today))
       ? ("on_loan" as const)
@@ -121,6 +123,7 @@ export const listMine = query({
       description: v.string(),
       status: v.union(v.literal("active"), v.literal("removed")),
       removedByAdmin: v.boolean(),
+      photoUrl: v.union(v.string(), v.null()),
       pendingRequests: v.number(),
     }),
   ),
@@ -144,17 +147,20 @@ export const listMine = query({
       .take(500);
     const counts = new Map<string, number>();
     for (const l of pendingLoans) counts.set(l.toolId, (counts.get(l.toolId) ?? 0) + 1);
-    return tools.map((t) => ({
-      _id: t._id,
-      name: t.name,
-      category: t.category,
-      condition: t.condition,
-      description: t.description,
-      status: t.status,
-      removedByAdmin:
-        t.status === "removed" && t.removedBy !== undefined && t.removedBy !== t.ownerId,
-      pendingRequests: counts.get(t._id) ?? 0,
-    }));
+    return Promise.all(
+      tools.map(async (t) => ({
+        _id: t._id,
+        name: t.name,
+        category: t.category,
+        condition: t.condition,
+        description: t.description,
+        status: t.status,
+        removedByAdmin:
+          t.status === "removed" && t.removedBy !== undefined && t.removedBy !== t.ownerId,
+        photoUrl: t.photoId ? await ctx.storage.getUrl(t.photoId) : null,
+        pendingRequests: counts.get(t._id) ?? 0,
+      })),
+    );
   },
 });
 

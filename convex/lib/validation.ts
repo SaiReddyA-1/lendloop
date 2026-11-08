@@ -90,7 +90,13 @@ export const LIMITS = {
   MAX_REQUESTS_PER_HOUR: 10,
   MAX_REQUESTS_PER_TOOL_PER_DAY: 2,
   MAX_TOOL_CREATES_PER_HOUR: 10,
+  PHOTO_MAX_BYTES: 2 * 1024 * 1024,
+  MAX_UPLOADS_PER_HOUR: 20,
 } as const;
+
+/** Accepted tool photo types (no SVG: it can carry script). Shared by the server check and the client pre-check. */
+export const PHOTO_CONTENT_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
+export type PhotoContentType = (typeof PHOTO_CONTENT_TYPES)[number];
 
 // Control chars (C0, DEL, C1).
 const CONTROL_CHARS = /[\u0000-\u001F\u007F-\u009F]/g;
