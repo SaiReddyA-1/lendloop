@@ -53,3 +53,9 @@ export function clerkJwtIssuerDomain(): string {
   // eslint-disable-next-line @convex-dev/no-process-env -- centralized env access (see file header)
   return process.env.CLERK_JWT_ISSUER_DOMAIN ?? "";
 }
+
+/** Dev-only guard for `seed:reset`. Must be exactly "true"; never set it on a production deployment. */
+export function allowSeedReset(): boolean {
+  // eslint-disable-next-line @convex-dev/no-process-env -- centralized env access (see file header)
+  return process.env.ALLOW_SEED_RESET === "true";
+}

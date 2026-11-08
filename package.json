@@ -13,9 +13,10 @@
     "test:watch": "vitest",
     "authz": "node scripts/check-authz.mjs",
     "authz:selftest": "node scripts/authz-selftest.mjs",
+    "lint:dashes": "node scripts/check-no-dashes.mjs",
     "scan:secrets": "node scripts/scan-secrets.mjs",
     "scan:secrets:selftest": "node scripts/scan-secrets-selftest.mjs",
-    "check": "npm run typecheck && npm run lint && npm run authz && npm run authz:selftest && npm run scan:secrets && npm run scan:secrets:selftest && npm test"
+    "check": "npm run typecheck && npm run lint && npm run lint:dashes && npm run authz && npm run authz:selftest && npm run scan:secrets && npm run scan:secrets:selftest && npm test"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.9.25",

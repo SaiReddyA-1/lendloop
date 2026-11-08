@@ -251,16 +251,25 @@ The bootstrap creates credentials from env, imports the three workflows and publ
 
 ### 7. Seed data and first admin
 
-Demo data (10 tools, loans in every state, one audit row, one outbox event):
+Demo data (8 neighbors, 26 active tools across every category plus one removed tool, 17 loans in every state, delivered notification history, one failed notification, one workflow error, audit rows):
 
 ```bash
-npx convex run seed:run                  # 3 placeholder users who CANNOT sign in (tokenIdentifier "seed|...")
+npx convex run seed:run                  # 8 placeholder users who CANNOT sign in (tokenIdentifier "seed|...")
+npx convex run seed:run '{"notify":true}' # also enqueue real n8n deliveries for the 4 pending requests (default: none, so reseeding never sends email)
 # or, to get users you can actually sign in as (Clerk TEST instance only):
 CLERK_SECRET_KEY=sk_test_... SEED_PASSWORD='choose-a-demo-password' node scripts/seed-clerk-users.mjs
 # --print only prints the `npx convex run seed:run '{...}'` command instead of running it
 ```
 
-`seed:run` is an `internalMutation` (not callable by browsers) and refuses to run when tools exist unless `{"force":true}`. The Clerk script refuses non-`sk_test_` keys and creates `alex|sam|priya+clerk_test@example.com`; its Clerk API calls were written from Clerk's reference and not verified against a live instance by the author.
+To start over (DEV deployments only, never production), enable the guard once, then reset and reseed:
+
+```bash
+npx convex env set ALLOW_SEED_RESET true
+npx convex run seed:reset '{"confirm":"DELETE ALL DEV DATA"}'   # deletes every row in every table; repeat while it prints done:false
+npx convex run seed:run '{}'
+```
+
+`seed:run` and `seed:reset` are `internalMutation`s (not callable by browsers). `seed:run` refuses to run when tools exist unless `{"force":true}`, which adds a second copy of every tool; prefer `seed:reset` then `seed:run`. `seed:reset` refuses unless `ALLOW_SEED_RESET` is exactly `true`. When you pass `clerkUsers` (what the Clerk script does), tools and loans are spread across those users. The Clerk script refuses non-`sk_test_` keys and creates `alex|sam|priya+clerk_test@example.com`; its Clerk API calls were written from Clerk's reference and not verified against a live instance by the author.
 
 **First admin** (pick one):
 

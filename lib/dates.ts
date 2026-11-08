@@ -18,11 +18,11 @@ function fmt(iso: string, withYear: boolean): string {
   return isValid(d) ? format(d, withYear ? "MMM d, yyyy" : "MMM d") : iso;
 }
 
-/** "Nov 10 – Nov 12", "Nov 10" (single day), adds the year when it is not this year. */
+/** "Nov 10 to Nov 12", "Nov 10" (single day), adds the year when it is not this year. */
 export function formatRange(start: string, end: string): string {
   const thisYear = String(new Date().getFullYear());
   const withYear = !start.startsWith(thisYear) || !end.startsWith(thisYear);
-  return start === end ? fmt(start, withYear) : `${fmt(start, withYear)} \u2013 ${fmt(end, withYear)}`;
+  return start === end ? fmt(start, withYear) : `${fmt(start, withYear)} to ${fmt(end, withYear)}`;
 }
 
 /** "Nov 8, 2026, 14:05" from an epoch-ms timestamp (local time). */

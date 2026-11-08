@@ -17,8 +17,8 @@ export function Logo({ size = "md", className }: { size?: "md" | "lg"; className
             <stop offset="100%" stopColor="#C0512C" />
           </linearGradient>
         </defs>
-        <circle cx="16" cy="16" r="11" fill="none" stroke={`url(#loop-grad-${size})`} strokeWidth="5" strokeDasharray="58 11" strokeLinecap="round" transform="rotate(-60 16 16)" />
-        <circle cx="16" cy="16" r="3" fill="#F1643F" />
+        <circle cx="16" cy="16" r="11" fill="none" stroke={`url(#loop-grad-${size})`} strokeWidth="5" strokeDasharray="58 11" strokeLinecap="round" transform="rotate(-16 16 16)" />
+        <circle cx="16" cy="16" r="3.5" fill="#F1643F" />
       </svg>
       <span className={cn("font-display font-normal tracking-tight", lg ? "text-6xl sm:text-7xl" : "text-2xl")}>
         LendLoop

@@ -59,7 +59,7 @@ export function PreviewContent({ dialog }: { dialog?: string }) {
   return (
     <div className="space-y-14">
       <div role="note" className="rounded-lg border border-status-warn-foreground bg-status-warn px-4 py-3 text-sm font-medium text-status-warn-foreground">
-        Development preview &mdash; fixture data. This page does not exist in production builds.
+        Development preview: fixture data. This page does not exist in production builds.
       </div>
       <h1 className="text-3xl font-semibold tracking-tight">Component preview</h1>
 
