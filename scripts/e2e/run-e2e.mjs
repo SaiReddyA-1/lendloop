@@ -3,7 +3,9 @@
 // Not part of `npm run check` (needs the live stack). Run: npm run e2e:api
 //
 // Config (env, all optional):
-//   E2E_INBOX_DIR            dir where the SMTP sink writes .eml files
+//   E2E_INBOX_DIR            dir where the SMTP sink writes .eml files (default mode)
+//   E2E_MAILPIT_URL          Mailpit base URL (e.g. http://127.0.0.1:8025): read emails via its API instead of E2E_INBOX_DIR
+//   E2E_N8N_DOCKER_DIR       compose dir (n8n/): step 10 runs `docker compose exec -T n8n n8n execute` there instead of the npm n8n
 //   E2E_N8N_URL              n8n base URL                      (default http://127.0.0.1:5678)
 //   E2E_CONVEX_SITE_URL      Convex HTTP actions base URL      (default http://127.0.0.1:3211)
 //   E2E_APP_URL              Next.js dev server                (default http://localhost:3000)
@@ -23,6 +25,8 @@ const execFileP = promisify(execFile);
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const e2eDir = path.resolve(repo, "..", ".tmp", "e2e");
 const INBOX = process.env.E2E_INBOX_DIR ?? path.join(e2eDir, "inbox");
+const MAILPIT = process.env.E2E_MAILPIT_URL ? process.env.E2E_MAILPIT_URL.replace(/\/$/, "") : "";
+const N8N_DOCKER_DIR = process.env.E2E_N8N_DOCKER_DIR ?? "";
 const N8N = (process.env.E2E_N8N_URL ?? "http://127.0.0.1:5678").replace(/\/$/, "");
 const SITE = (process.env.E2E_CONVEX_SITE_URL ?? "http://127.0.0.1:3211").replace(/\/$/, "");
 const APP = (process.env.E2E_APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
@@ -94,7 +98,23 @@ const ADMIN = ident("admin", "Ada Admin", "ada.admin@example.com");
 
 // ---- SMTP inbox (.eml files written by the capture sink)
 const emlCache = new Map();
-function readInbox() {
+async function readMailpit() {
+  // Newest first from the API; reverse so the order is oldest first, like the sorted .eml directory.
+  const res = await fetch(`${MAILPIT}/api/v1/messages?limit=1000`);
+  const j = await res.json();
+  return (j.messages ?? [])
+    .slice()
+    .reverse()
+    .map((m) => ({
+      file: m.ID,
+      subject: m.Subject ?? "",
+      to: (m.To ?? []).map((a) => a.Address).join(", ").toLowerCase(),
+      // Body text is fetched lazily with: GET /api/v1/message/{ID} (field "Text").
+      body: async () => (await (await fetch(`${MAILPIT}/api/v1/message/${m.ID}`)).json()).Text ?? "",
+    }));
+}
+async function readInbox() {
+  if (MAILPIT) return readMailpit();
   if (!existsSync(INBOX)) return [];
   const out = [];
   for (const f of readdirSync(INBOX)) {
@@ -120,14 +140,14 @@ async function waitEmail(to, subj, ms = 25_000) {
   const end = Date.now() + ms;
   const match = (m) => (!to || m.to.includes(to.toLowerCase())) && (subj instanceof RegExp ? subj.test(m.subject) : m.subject.includes(subj));
   do {
-    const hit = readInbox().find(match);
+    const hit = (await readInbox()).find(match);
     if (hit) return hit;
     await sleep(500);
   } while (Date.now() < end);
   return null;
 }
-const countEmails = (to, subj) =>
-  readInbox().filter((m) => (!to || m.to.includes(to.toLowerCase())) && (subj instanceof RegExp ? subj.test(m.subject) : m.subject.includes(subj))).length;
+const countEmails = async (to, subj) =>
+  (await readInbox()).filter((m) => (!to || m.to.includes(to.toLowerCase())) && (subj instanceof RegExp ? subj.test(m.subject) : m.subject.includes(subj))).length;
 
 /** Waits for the newest automationEvent of `type` on a loan (as `who`) to reach `delivered`. */
 async function waitEvent(loanId, type, who, ms = 25_000) {
@@ -325,10 +345,18 @@ async function step10() {
   const total = async () => (await inlineQuery('await ctx.db.query("reminders").collect()')).length;
   const overdueNames = ["Pressure washer 130 bar", "Carpet cleaner"];
   const beforeRows = await total();
-  const beforeMail = countEmails(null, "Overdue: please return");
+  const beforeMail = await countEmails(null, "Overdue: please return");
 
   // Runs the n8n CLI directly with node (npx could try to download n8n). Exit 90 = n8n package not on disk.
   const runWf = () => {
+    if (N8N_DOCKER_DIR) {
+      // Docker: the CLI runs inside the container next to the live server, so it needs its own task broker port.
+      return spawnSync("docker", ["compose", "exec", "-T", "-e", "N8N_RUNNERS_BROKER_PORT=5689", "n8n", "n8n", "execute", "--id=lendloopWf02"], {
+        cwd: N8N_DOCKER_DIR,
+        encoding: "utf8",
+        timeout: 180_000,
+      });
+    }
     const bash = process.env.E2E_BASH ?? (existsSync("C:\\Program Files\\Git\\bin\\bash.exe") ? "C:\\Program Files\\Git\\bin\\bash.exe" : "bash");
     if (!existsSync(N8N_ENV_FILE)) return { status: 91 };
     const envFile = N8N_ENV_FILE.replace(/\\/g, "/");
@@ -368,15 +396,16 @@ async function step10() {
   check("10", "n8n execute WF2 (first run) exit 0", r1.status === 0, `exit ${r1.status}`);
   await sleep(2500);
   const rows1 = await total();
-  const mails1 = countEmails(null, "Overdue: please return");
+  const mails1 = await countEmails(null, "Overdue: please return");
   // Pressure washer already has a reminder for YESTERDAY only, so today's run covers both overdue seeded loans.
-  const got = overdueNames.filter((n) => readInbox().some((m) => m.subject === `Overdue: please return ${n}`));
+  const inboxNow = await readInbox();
+  const got = overdueNames.filter((n) => inboxNow.some((m) => m.subject === `Overdue: please return ${n}`));
   check("10", "reminder emails for seeded overdue loans", got.length === 2 && mails1 - beforeMail === 2, `new emails ${mails1 - beforeMail}: ${got.join("; ")}`);
   check("10", "Convex reminders rows recorded", rows1 - beforeRows === 2, `+${rows1 - beforeRows} rows`);
   const r2 = runWf();
   await sleep(2500);
   const rows2 = await total();
-  const mails2 = countEmails(null, "Overdue: please return");
+  const mails2 = await countEmails(null, "Overdue: please return");
   check("10", "second run idempotent (no new rows/emails)", r2.status === 0 && rows2 === rows1 && mails2 === mails1, `rows ${rows1}->${rows2}, emails ${mails1}->${mails2}`);
 }
 
@@ -447,26 +476,26 @@ async function step12() {
   const rep = await sendEvent(sec, evPayload(id));
   const repBody = await rep.text();
   await sleep(1500);
-  check("12", "replay same eventId -> 200 duplicate, no 2nd email", rep.status === 200 && /duplicate/.test(repBody) && countEmails("hook.recipient@example.com", `E2E Hook ${RUN}`) === 1, `status ${rep.status} ${repBody.slice(0, 60)}`);
+  check("12", "replay same eventId -> 200 duplicate, no 2nd email", rep.status === 200 && /duplicate/.test(repBody) && (await countEmails("hook.recipient@example.com", `E2E Hook ${RUN}`)) === 1, `status ${rep.status} ${repBody.slice(0, 60)}`);
   const bad = await sendEvent(sec, evPayload(`e2e-${RUN}-bad`), { badSig: true });
   check("12", "bad signature -> 401", bad.status === 401, `status ${bad.status}`);
   const stale = await sendEvent(sec, evPayload(`e2e-${RUN}-stale`), { tsOffset: -400 });
   check("12", "stale timestamp (-400 s) -> 401", stale.status === 401, `status ${stale.status}`);
   await sleep(1000);
-  check("12", "rejected events sent no email", countEmails("hook.recipient@example.com", `E2E Hook ${RUN}`) === 1, "");
+  check("12", "rejected events sent no email", (await countEmails("hook.recipient@example.com", `E2E Hook ${RUN}`)) === 1, "");
 }
 
 async function step13() {
   const sec = await secret("E2E_WEBHOOK_SECRET_FILE", "N8N_WEBHOOK_SECRET", path.join(e2eDir, "secrets", "webhook"));
   const before = (await cx("admin:listWorkflowErrors", {}, ADMIN)).data?.length ?? 0;
-  const mailsBefore = readInbox().length;
+  const mailsBefore = (await readInbox()).length;
   const r = await sendEvent(sec, evPayload(`e2e-${RUN}-unsupported`, { eventType: "totally_unknown" }));
   check("13", "unsupported eventType -> n8n 500", r.status === 500, `status ${r.status}`);
-  const known = new Set(readInbox().slice(0, mailsBefore).map((m) => m.file));
+  const known = new Set((await readInbox()).slice(0, mailsBefore).map((m) => m.file));
   const end = Date.now() + 30_000;
   let alert;
   while (!alert && Date.now() < end) {
-    alert = readInbox().find((m) => !known.has(m.file) && /error|fail|alert|workflow/i.test(m.subject));
+    alert = (await readInbox()).find((m) => !known.has(m.file) && /error|fail|alert|workflow/i.test(m.subject));
     if (!alert) await sleep(1000);
   }
   check("13", "admin alert email captured", !!alert, alert ? `subject "${alert.subject}"` : "none");
@@ -495,9 +524,9 @@ async function step14() {
 
 // ---------------------------------------------------------------- run
 const steps = [step1, step2, step3, step4, step5, step6, step7, step8, step9, step10, step11, step12, step13, step14];
-console.log(`LendLoop E2E (run ${RUN}) inbox=${INBOX}`);
-if (!existsSync(INBOX)) console.log("WARNING: inbox dir not found; email assertions will fail");
-emailsBefore = readInbox().length;
+console.log(`LendLoop E2E (run ${RUN}) inbox=${MAILPIT ? `mailpit ${MAILPIT}` : INBOX}${N8N_DOCKER_DIR ? " n8n=docker" : ""}`);
+if (!MAILPIT && !existsSync(INBOX)) console.log("WARNING: inbox dir not found; email assertions will fail");
+emailsBefore = (await readInbox()).length;
 for (const [i, fn] of steps.entries()) {
   try {
     await fn();
@@ -505,7 +534,7 @@ for (const [i, fn] of steps.entries()) {
     record(String(i + 1), `${fn.name} crashed`, false, String(e?.message ?? e).slice(0, 200));
   }
 }
-const emailsNew = readInbox().length - emailsBefore;
+const emailsNew = (await readInbox()).length - emailsBefore;
 console.log("\nStep | Result | Check | Evidence");
 for (const r of results) console.log(`${r.step} | ${r.ok === true ? "PASS" : r.ok === false ? "FAIL" : r.ok} | ${r.name} | ${r.evidence ?? ""}`);
 const failed = results.filter((r) => r.ok === false).length;

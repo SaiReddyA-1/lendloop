@@ -82,7 +82,9 @@ Any SMTP catcher on 127.0.0.1:1025 works (Mailpit binary, MailHog, `smtp-sink`).
 - **Timeout alignment**: n8n email retries can take >10 s, so Convex `DELIVERY_TIMEOUT_MS` is 30 s (ADR-028).
 - **Timezone**: the schedule follows `GENERIC_TIMEZONE`; overdue dates are computed in UTC by Convex (ADR-006).
 - **`N8N_SECURE_COOKIE=false`** is needed to log in over plain `http://localhost`; never in production.
-- **Docker** was not available on the development machine, so `docker-compose.yml` and the container bootstrap path are untested here; the local npm path is what `E2E-RESULTS.md` verified.
+- **Docker** path verified on Windows 11 with Docker Desktop 29.9.2 / Compose 5.6.1 and images `docker.n8n.io/n8nio/n8n:2.46.6` and `axllent/mailpit:v1.33.0`: both services reach `healthy`, `scripts/bootstrap.sh` imports and publishes inside the container, and the API E2E passes 75/75 (see `docs/E2E-API-RESULTS.md`, "Docker run"). Still untested: Linux hosts (secret file needs `chmod 644`, uid 1000) and macOS.
+- **Git Bash on Windows** rewrites `/scripts/...` arguments to `C:/Program Files/Git/...`; `bootstrap.sh` sets `MSYS_NO_PATHCONV=1` for that reason.
+- **`n8n execute` inside the container** works while the server runs: `docker compose exec -T -e N8N_RUNNERS_BROKER_PORT=5689 n8n n8n execute --id=lendloopWf02`.
 
 ## Re-exporting after UI edits
 

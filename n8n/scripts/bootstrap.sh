@@ -13,6 +13,8 @@ if [ "${1:-}" = "--local" ]; then
   exec node scripts/bootstrap.mjs
 fi
 
+# Git Bash (MSYS) rewrites arguments that look like POSIX paths (/scripts/...) into C:/Program Files/Git/...; disable that.
+export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL="*"
 # Docker: pass secrets per-exec (-e NAME without value forwards our env); they are not stored in the container.
 exec docker compose exec -T \
   -e LENDLOOP_INBOUND_TOKEN \

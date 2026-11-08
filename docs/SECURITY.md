@@ -71,5 +71,5 @@ Standards targeted: OWASP ASVS 5.0 L2, OWASP Top 10 2025, OWASP API Security Top
 - Overdue scan reads at most 1000 rows per run; HSTS preload deliberately not enabled yet.
 - Call-volume rate limiting, pagination, external alerting, dependency audit and gitleaks in CI.
 - CSP in Clerk's nonce mode, not `strict-dynamic`; no CSP reporting.
-- Docker/Mailpit path and signed-in flows against real Clerk not exercised by the author.
+- The Docker/Mailpit path was verified on Windows (Docker Desktop 29.9.2): encryption key delivered only as `/run/secrets/n8n_encryption_key` (`N8N_ENCRYPTION_KEY_FILE`, no `N8N_ENCRYPTION_KEY` in the container env), bootstrap temp credentials dir removed. Linux secret-file permissions and signed-in flows against real Clerk are not exercised by the author.
 - `/dev/preview` is dev-only (404 in production) but present in the repository.

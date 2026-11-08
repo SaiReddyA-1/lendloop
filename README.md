@@ -248,7 +248,7 @@ docker compose restart n8n   # required: published webhooks are only registered 
 
 n8n: http://localhost:5678 (create the owner account on first visit). Mailpit: http://localhost:8025.
 
-**Without Docker:** install `n8n@2.46.6` with npm in a separate folder, export the `LENDLOOP_*`, `NODE_FUNCTION_ALLOW_BUILTIN=crypto`, `N8N_BLOCK_ENV_ACCESS_IN_NODE=false`, `N8N_SECURE_COOKIE=false` variables, point `SMTP_HOST`/`SMTP_PORT` at any local SMTP catcher (e.g. a Mailpit binary on 127.0.0.1:1025), run `N8N_CMD="npx n8n" ./n8n/scripts/bootstrap.sh --local`, then `npx n8n start`. Exact commands are in the n8n README ("Setup without Docker"). This is the path that was verified end to end.
+**Without Docker:** install `n8n@2.46.6` with npm in a separate folder, export the `LENDLOOP_*`, `NODE_FUNCTION_ALLOW_BUILTIN=crypto`, `N8N_BLOCK_ENV_ACCESS_IN_NODE=false`, `N8N_SECURE_COOKIE=false` variables, point `SMTP_HOST`/`SMTP_PORT` at any local SMTP catcher (e.g. a Mailpit binary on 127.0.0.1:1025), run `N8N_CMD="npx n8n" ./n8n/scripts/bootstrap.sh --local`, then `npx n8n start`. Exact commands are in the n8n README ("Setup without Docker"). The Docker path is also verified (see Known limitations).
 
 The bootstrap creates credentials from env, imports the three workflows and publishes them. Local Convex serves HTTP actions on `http://127.0.0.1:3211`; hosted dev deployments use `https://<name>.convex.site` (set `LENDLOOP_CONVEX_SITE_URL` accordingly).
 
@@ -391,7 +391,7 @@ Standards targeted: OWASP ASVS 5.0 L2, Top 10 2025, API Top 10 2023. Full map wi
 
 Honest list; most are deliberate scope cuts with a production path in [docs/PRODUCTION.md](docs/PRODUCTION.md).
 
-- **Docker path untested**: `n8n/docker-compose.yml` (including Mailpit) and the container bootstrap were not run on the author's machine (no Docker). The automation was verified with a local npm n8n 2.46.6 and an SMTP sink instead ([E2E-RESULTS](n8n/E2E-RESULTS.md)).
+- **Docker path verified, with caveats**: `n8n/docker-compose.yml` (n8n 2.46.6 + Mailpit v1.33.0) and the container bootstrap were run end to end on Windows 11 with Docker Desktop 29.9.2 (Compose 5.6.1): both services `healthy`, the full API E2E passed 75/75 ([results](docs/E2E-API-RESULTS.md#docker-run)). Not verified: Linux hosts (the encryption key secret file must be `chmod 644` there because the container user is uid 1000) and a Linux-native `host.docker.internal` (relies on the `host-gateway` extra host). The earlier npm n8n run is in [E2E-RESULTS](n8n/E2E-RESULTS.md).
 - **Signed-in flows not exercised against a real Clerk instance** by the author. Convex logic is covered by tests with mocked identities; signed-in UI was reviewed through `/dev/preview` fixtures, and `scripts/seed-clerk-users.mjs` is unverified against live Clerk.
 - **`take()` caps instead of pagination** (200 tools, 100 loans per list); no search index (ADR-018).
 - **Rate limits are in-transaction business counts**, not call-volume limiting; failed calls are not counted (ADR-019).
