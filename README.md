@@ -4,10 +4,22 @@
 
 LendLoop is a neighborhood tool-lending board. Neighbors list tools they are willing to lend, request tools for a date range, and the owner approves, declines, and later marks the tool returned. Every loan event triggers an email through an n8n workflow, and overdue loans get a daily reminder.
 
+## Live demo for reviewers
+
+> TODO: fill in after the first deploy (placeholders only; no URLs are live yet).
+
+- App: TODO (Vercel URL, `https://<project>.vercel.app`)
+- Email inbox (Mailpit): TODO (Railway URL); the password is shared privately, never in this repo
+- Sign up: any email works; addresses with `+clerk_test` accept the code `424242` (Clerk development instance, banner and 100-user cap apply)
+- n8n editor: private to the owner (not shared)
+
+How it is deployed, the environment matrix, secret rotation and known limits: [docs/DEPLOY.md](docs/DEPLOY.md).
+
 | Doc | What is in it |
 |---|---|
 | [docs/DECISIONS.md](docs/DECISIONS.md) | 29 architecture decision records (ADR-001..029) |
 | [docs/SECURITY.md](docs/SECURITY.md) | Security controls map with status and evidence |
+| [docs/DEPLOY.md](docs/DEPLOY.md) | Runbook for the Vercel, Convex, Railway reviewer demo deployment |
 | [docs/PRODUCTION.md](docs/PRODUCTION.md) | What must change before production |
 | [n8n/README.md](n8n/README.md) | n8n setup, import/publish, gotchas |
 | [n8n/E2E-RESULTS.md](n8n/E2E-RESULTS.md) | End-to-end test results for the automation |

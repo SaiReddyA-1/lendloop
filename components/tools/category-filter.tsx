@@ -27,9 +27,9 @@ export function CategoryFilter({ value, onChange }: Props) {
             aria-pressed={pressed}
             onClick={() => onChange(option.value)}
             className={cn(
-              "inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium transition-colors",
+              "inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium transition-colors duration-200",
               pressed
-                ? "border-brand bg-brand-soft text-foreground ring-1 ring-brand"
+                ? "border-brand bg-brand-soft text-foreground ring-1 ring-inset ring-brand"
                 : "border-input bg-card text-foreground hover:bg-accent",
             )}
           >

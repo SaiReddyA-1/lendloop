@@ -177,6 +177,7 @@ export function IncomingLoans() {
         title="Incoming requests"
         description="Neighbors asking to borrow your tools, and the loans in progress."
       />
+      <div className="min-h-[20rem]">
       {loans === undefined ? (
         <ListSkeleton />
       ) : loans.length === 0 ? (
@@ -193,6 +194,7 @@ export function IncomingLoans() {
           )}
         />
       )}
+      </div>
     </>
   );
 }

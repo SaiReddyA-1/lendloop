@@ -1,0 +1,18 @@
+# Docker build context for deploy/railway/n8n/Dockerfile (context = repo root).
+# Allowlist: ignore everything, then re-include only what the image copies.
+*
+
+!n8n/workflows/*.json
+!n8n/scripts/bootstrap.mjs
+!deploy/railway/n8n/entrypoint.sh
+!deploy/railway/n8n/Dockerfile
+
+# Explicit safety net (already covered by the allowlist): never send these to a builder.
+**/node_modules
+**/.next
+**/.convex
+**/.env*
+**/.tmp
+**/.git
+**/secrets
+docs/screenshots

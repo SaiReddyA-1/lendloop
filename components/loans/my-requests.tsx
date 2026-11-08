@@ -139,6 +139,7 @@ export function MyRequests() {
         title="My requests"
         description="Everything you've asked to borrow, and where each request stands."
       />
+      <div className="min-h-[20rem]">
       {loans === undefined ? (
         <ListSkeleton />
       ) : loans.length === 0 ? (
@@ -158,6 +159,7 @@ export function MyRequests() {
           renderFooter={(loan) => <AutomationTimeline events={eventsFor(loan._id)} />}
         />
       )}
+      </div>
     </>
   );
 }

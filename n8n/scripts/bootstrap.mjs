@@ -7,6 +7,7 @@
 //                N8N_BIN    path to node_modules/n8n/bin/n8n for a local npm install (spaces in paths OK)
 //                N8N_CMD    simple command used to run n8n (default "n8n", e.g. inside the container)
 //                WORKFLOWS_DIR (default: ../workflows next to this script)
+//                LENDLOOP_BOOTSTRAP_AT_START=1  set by the hosted entrypoint (runs before the server starts; no restart hint)
 //                LENDLOOP_TMP  directory for the short-lived credentials file (default: the OS temp dir)
 // Usage: node bootstrap.mjs   (inside the container, or locally with N8N_CMD set)
 import { spawnSync } from "node:child_process";
@@ -111,8 +112,13 @@ function main() {
     console.log(`  ${name}`);
     run(["publish:workflow", `--id=${id}`]);
   }
-  console.log("Done. Restart n8n so published workflows (webhook/schedule) are registered:");
-  console.log("  docker compose restart n8n   (or restart your local `n8n start`)");
+  if (process.env.LENDLOOP_BOOTSTRAP_AT_START === "1") {
+    // Hosted mode (deploy/railway/n8n/entrypoint.sh): this runs before the server starts, so no restart is needed.
+    console.log("Done. Workflows are published; n8n registers them as the server starts.");
+  } else {
+    console.log("Done. Restart n8n so published workflows (webhook/schedule) are registered:");
+    console.log("  docker compose restart n8n   (or restart your local `n8n start`)");
+  }
 }
 
 let exitCode = 0;

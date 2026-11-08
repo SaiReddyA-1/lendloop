@@ -115,8 +115,9 @@ export function MyListings() {
         description="Tools you lend out. Edit details or take one off the board any time."
         action={<ToolFormDialog trigger={listButton} />}
       />
+      <div className="min-h-[20rem]">
       {tools === undefined ? (
-        <ListSkeleton />
+        <ListSkeleton variant="listings" />
       ) : tools.length === 0 ? (
         <EmptyState
           icon={Wrench}
@@ -131,6 +132,7 @@ export function MyListings() {
           ))}
         </ul>
       )}
+      </div>
     </>
   );
 }
