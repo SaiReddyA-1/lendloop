@@ -307,7 +307,8 @@ Every variable read by code in this repo. "Required" means the feature fails wit
 | `LENDLOOP_INBOUND_TOKEN` | shell only (bootstrap) | yes for bootstrap | Becomes the n8n Header Auth credential; equals Convex `N8N_INBOUND_TOKEN` | `<64 hex chars>` |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_SECURE` | shell only (bootstrap) | host defaults to `mailpit`, port 1025 | Become the `LendLoop SMTP` credential | `mailpit`, `1025` |
 | `LENDLOOP_TMP` | shell only (bootstrap, `scan-secrets-selftest`) | no | Temp directory for the bootstrap credentials file and self-test fixtures (default: OS temp dir) | `D:\tmp` |
-| `N8N_CMD` | shell only (bootstrap) | no | Command used to run n8n; `npx n8n` for a local install | `npx n8n` |
+| `N8N_CMD` | shell only (bootstrap) | no | Simple command used to run n8n (no spaces inside paths); `npx n8n` from the n8n install folder | `npx n8n` |
+| `N8N_BIN` | shell only (bootstrap) | no | Path to `node_modules/n8n/bin/n8n` of a local install; runs it with node and no shell, so paths with spaces work (takes precedence over `N8N_CMD`) | `D:/tools/n8n/node_modules/n8n/bin/n8n` |
 | `WORKFLOWS_DIR` | shell only (bootstrap) | no | Override workflow directory | (default `n8n/workflows`) |
 | `CLERK_SECRET_KEY`, `SEED_PASSWORD` | shell only (`seed-clerk-users.mjs`) | for that script | Clerk TEST key (must be `sk_test_`) and demo password | `sk_test_...`, `<password>` |
 | `N8N_RUNNERS_BROKER_PORT` | shell only | only when running `n8n execute` next to a live instance | Avoids port 5679 clash | `5689` |
