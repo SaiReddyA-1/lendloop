@@ -5,7 +5,7 @@ import { clerkMiddleware } from "@clerk/nextjs/server";
  *
  * Route protection here is a UX convenience (redirect unauthenticated users to
  * sign-in). It is NOT the security boundary: every Convex function performs its
- * own authentication/authorization (see README.md and docs/DECISIONS.md).
+ * own authentication/authorization (see docs/SECURITY.md and docs/DECISIONS.md).
  */
 const PROTECTED_PREFIXES = ["/dashboard", "/admin"];
 
