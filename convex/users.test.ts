@@ -25,16 +25,28 @@ describe("users.ensureCurrent", () => {
     expect(await audits(t)).toHaveLength(0);
   });
 
-  it("falls back to email local-part then 'Neighbor' for the name", async () => {
+  it("never derives the display name from the email; falls back name -> givenName(+initial) -> Neighbor", async () => {
     const t = newT();
+    const iss = "https://test.clerk.dev";
     const a = await t
-      .withIdentity({ subject: "u1", issuer: "https://test.clerk.dev", email: "bob@example.com" })
+      .withIdentity({ subject: "u1", issuer: iss, email: "bob@example.com" })
       .mutation(api.users.ensureCurrent, {});
-    expect(a.name).toBe("bob");
+    expect(a.name).toBe("Neighbor");
     const b = await t
-      .withIdentity({ subject: "u2", issuer: "https://test.clerk.dev" })
+      .withIdentity({ subject: "u2", issuer: iss, givenName: "Grace", familyName: "hopper" })
       .mutation(api.users.ensureCurrent, {});
-    expect(b.name).toBe("Neighbor");
+    expect(b.name).toBe("Grace H.");
+    const c = await t
+      .withIdentity({ subject: "u3", issuer: iss, givenName: "Linus" })
+      .mutation(api.users.ensureCurrent, {});
+    expect(c.name).toBe("Linus");
+    // A name claim that is itself an email address is not used.
+    const d = await t
+      .withIdentity({ subject: "u4", issuer: iss, name: "eve@example.com", givenName: "Eve" })
+      .mutation(api.users.ensureCurrent, {});
+    expect(d.name).toBe("Eve");
+    const rows = await t.run((ctx) => ctx.db.query("users").collect());
+    expect(rows.find((r) => r.clerkUserId === "u1")?.email).toBe("bob@example.com");
   });
 
   it("is idempotent: no duplicate rows", async () => {

@@ -6,7 +6,7 @@ import { BACKOFF_MS, MAX_ATTEMPTS } from "./notifications";
 import { makeLoan, makeTool, makeUser, newT, NOW_ISO, type T } from "../tests/helpers";
 
 const URL_ = "http://localhost:5678/webhook/lendloop-loan-events";
-const SECRET = "test-webhook-secret";
+const SECRET = "test-webhook-secret-0123456789abcdef0123456789"; // scan-secrets:allow test value
 
 let fetchMock: ReturnType<typeof vi.fn>;
 
@@ -229,6 +229,36 @@ describe("notifications.deliver", () => {
       lastErrorCode: "NOT_CONFIGURED",
       attempts: 0,
     });
+  });
+
+  it("short webhook secret (<32 chars) -> failed NOT_CONFIGURED, no fetch", async () => {
+    const { t, eventId } = await setup();
+    vi.stubEnv("N8N_WEBHOOK_SECRET", "too-short");
+    await t.action(internal.notifications.deliver, { eventId });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(await getEvent(t, eventId)).toMatchObject({ status: "failed", lastErrorCode: "NOT_CONFIGURED" });
+  });
+
+  it("non-https webhook URL -> failed INSECURE_WEBHOOK_URL (no fetch); loopback hosts allowed", async () => {
+    for (const bad of ["http://n8n.example.com/webhook/x", "ftp://localhost/x", "not a url", "https://u:p@example.com/x"]) {
+      const { t, eventId } = await setup();
+      vi.stubEnv("N8N_WEBHOOK_URL", bad);
+      await t.action(internal.notifications.deliver, { eventId });
+      expect(await getEvent(t, eventId)).toMatchObject({ status: "failed", lastErrorCode: "INSECURE_WEBHOOK_URL" });
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+    for (const ok of [
+      "https://n8n.example.com/webhook/x",
+      "http://localhost:5678/webhook/x",
+      "http://127.0.0.1:5678/x",
+      "http://host.docker.internal:5678/x",
+      "http://[::1]:5678/x",
+    ]) {
+      const { t, eventId } = await setup();
+      vi.stubEnv("N8N_WEBHOOK_URL", ok);
+      await t.action(internal.notifications.deliver, { eventId });
+      expect(await getEvent(t, eventId)).toMatchObject({ status: "delivered" });
+    }
   });
 
   it("recipient without email -> failed NO_RECIPIENT_EMAIL", async () => {

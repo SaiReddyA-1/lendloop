@@ -238,6 +238,12 @@ function wf2() {
       [1440, 400],
       "/api/n8n/reminders",
       "={{ JSON.stringify({ loanId: $json.loanId, reminderDate: $('Get overdue loans').first().json.date, outcome: $json.outcome }) }}",
+      // One bad loan (e.g. 409: returned mid-run, 404: deleted) must not abort the remaining reminders.
+      // Retries (3 tries, for 5xx/network) still run first; after the last failure the item continues so the loop
+      // finishes. Trade-off: a Convex outage while recording is not an execution error (the Get overdue loans
+      // step still is, and fires the error workflow); a missed record means that loan may be reminded again on the
+      // next run the same day. Use Convex data (reminders table) as the source of truth.
+      { onError: "continueRegularOutput" },
     ),
   ];
   return {

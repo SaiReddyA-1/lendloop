@@ -14,14 +14,14 @@ Workflow ids are fixed (`lendloopWf01`, `lendloopWf02`, `lendloopWf99`) and cred
 
 | Variable | Where | Purpose |
 |---|---|---|
-| `N8N_ENCRYPTION_KEY` | n8n | Encrypts stored credentials. Back it up. |
+| `N8N_ENCRYPTION_KEY_FILE` | n8n | Path of a Docker secret (`/run/secrets/n8n_encryption_key`, from `n8n/secrets/n8n_encryption_key`) holding the key that encrypts stored credentials. NOT an env var / not in `.env`, so it is not visible via `$env`, `docker inspect` or `/proc/*/environ`. Back it up. |
 | `LENDLOOP_WEBHOOK_SECRET` | n8n | HMAC secret; equals Convex `N8N_WEBHOOK_SECRET` |
 | `LENDLOOP_CONVEX_SITE_URL` | n8n | Convex HTTP base (`http://127.0.0.1:3211` local, `host.docker.internal:3211` from Docker, `https://<name>.convex.site` prod) |
 | `LENDLOOP_MAIL_FROM`, `LENDLOOP_ADMIN_ALERT_EMAIL` | n8n | Sender / error alert recipient |
 | `GENERIC_TIMEZONE` | n8n | Timezone of the 09:00 schedule (workflows do not set their own) |
 | `NODE_FUNCTION_ALLOW_BUILTIN=crypto` | n8n | Lets the Code node `require('crypto')` |
-| `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` | n8n | Lets nodes read `$env.LENDLOOP_*`. Trade-off: editors can read all env (ADR-025) |
-| `N8N_SECURE_COOKIE=false` | n8n | LOCAL HTTP only; keep `true` behind HTTPS |
+| `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` | n8n | Lets nodes read `$env.LENDLOOP_*` (the Code node needs `LENDLOOP_WEBHOOK_SECRET`). Trade-off: editors can read all env (ADR-025); the encryption key is excluded because it is a secret file |
+| `N8N_SECURE_COOKIE` (compose default `false`) | n8n | LOCAL HTTP only; set `true` (and `N8N_PROTOCOL=https`) behind HTTPS |
 | `LENDLOOP_INBOUND_TOKEN`, `SMTP_HOST/PORT/USER/PASSWORD/SECURE` | your shell, for bootstrap only | Become the credentials `LendLoop Convex inbound` (Header Auth `Authorization: Bearer ...`) and `LendLoop SMTP` |
 | Convex: `N8N_WEBHOOK_URL`, `N8N_WEBHOOK_SECRET`, `N8N_INBOUND_TOKEN` | Convex env | See `convex.env.example` |
 
@@ -31,7 +31,8 @@ Generate secrets: `node -e "console.log(require('crypto').randomBytes(32).toStri
 
 ```bash
 cd n8n
-cp .env.example .env                # fill N8N_ENCRYPTION_KEY, LENDLOOP_WEBHOOK_SECRET
+cp .env.example .env                # fill LENDLOOP_WEBHOOK_SECRET
+mkdir -p secrets && printf %s "$(openssl rand -hex 32)" > secrets/n8n_encryption_key   # encryption key as a Docker secret file, NOT in .env
 docker compose up -d
 export LENDLOOP_INBOUND_TOKEN=...   # same as Convex N8N_INBOUND_TOKEN
 ./scripts/bootstrap.sh              # Windows: .\scripts\bootstrap.ps1

@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery, query } from "./_generated/server";
 import { requireUser } from "./lib/auth";
-import { daysBetweenInclusive, isIsoDate, todayUtc } from "./lib/dates";
+import { addDays, daysBetweenInclusive, isIsoDate, todayUtc } from "./lib/dates";
 import { appError } from "./lib/errors";
 import {
   automationEventTypeValidator,
@@ -13,7 +13,6 @@ import {
 
 const MAX_LOAN_IDS = 100;
 const EVENTS_PER_LOAN = 5;
-const OVERDUE_CAP = 100;
 
 const eventItemValidator = v.object({
   type: automationEventTypeValidator,
@@ -64,26 +63,33 @@ export const listForLoans = query({
   },
 });
 
-/** Approved loans past their end date that have no reminder row for today yet. Reminder-minimal fields only. */
-export const overdueLoans = internalQuery({
-  args: {},
-  handler: async (ctx) => {
-    const date = todayUtc();
-    const approved = await ctx.db
+/** Max un-reminded overdue loans returned per call to GET /api/n8n/overdue-loans. */
+export const OVERDUE_CAP = 100;
+/** Rows read per internal query page. */
+export const OVERDUE_PAGE_SIZE = 100;
+/**
+ * Hard bound on rows scanned per request (10 pages). The scan walks the `by_status_endDate` range
+ * (approved, endDate < today) oldest-first and SKIPS loans already reminded today, so reminded loans never
+ * starve newer ones. Limitation (documented): if more than ~1000 approved loans are overdue, those beyond the
+ * first 1000 (by endDate) are not reached in a single run. Acceptable for a neighborhood app; revisit with a
+ * per-day "reminded" marker on the loan if it ever matters.
+ */
+export const OVERDUE_SCAN_MAX = 1000;
+
+/**
+ * One page of the overdue scan (call repeatedly with the returned cursor; see `collectOverdue` in http.ts).
+ * A paginated read is limited to ONE per Convex function, hence one page per query call.
+ * Reminder-minimal fields only.
+ */
+export const overdueLoansPage = internalQuery({
+  args: { date: v.string(), cursor: v.union(v.string(), v.null()), numItems: v.number() },
+  handler: async (ctx, { date, cursor, numItems }) => {
+    const page = await ctx.db
       .query("loans")
       .withIndex("by_status_endDate", (q) => q.eq("status", "approved").lt("endDate", date))
-      .take(OVERDUE_CAP * 2);
-    const loans: {
-      loanId: string;
-      toolName: string;
-      borrowerName: string;
-      borrowerEmail: string;
-      endDate: string;
-      daysOverdue: number;
-      idempotencyKey: string;
-    }[] = [];
-    for (const loan of approved) {
-      if (loans.length >= OVERDUE_CAP) break;
+      .paginate({ numItems: Math.min(Math.max(1, Math.floor(numItems)), OVERDUE_PAGE_SIZE), cursor });
+    const loans: OverdueLoan[] = [];
+    for (const loan of page.page) {
       const idempotencyKey = `${loan._id}:${date}`;
       const existing = await ctx.db
         .query("reminders")
@@ -105,9 +111,24 @@ export const overdueLoans = internalQuery({
         idempotencyKey,
       });
     }
-    return { date, loans };
+    return {
+      loans,
+      scanned: page.page.length,
+      isDone: page.isDone,
+      continueCursor: page.continueCursor,
+    };
   },
 });
+
+export type OverdueLoan = {
+  loanId: string;
+  toolName: string;
+  borrowerName: string;
+  borrowerEmail: string;
+  endDate: string;
+  daysOverdue: number;
+  idempotencyKey: string;
+};
 
 /** Records an overdue reminder outcome. Idempotency key is computed server-side. */
 export const recordReminder = internalMutation({
@@ -115,6 +136,11 @@ export const recordReminder = internalMutation({
   handler: async (ctx, args) => {
     const loanId = ctx.db.normalizeId("loans", args.loanId);
     if (!loanId || !isIsoDate(args.reminderDate)) return { status: "invalid" as const };
+    // Reminders are for "today": accept only today +-1 day (clock/timezone skew); stops arbitrary-date rows.
+    const today = todayUtc();
+    if (args.reminderDate < addDays(today, -1) || args.reminderDate > addDays(today, 1)) {
+      return { status: "invalid" as const };
+    }
     const loan = await ctx.db.get("loans", loanId);
     if (!loan) return { status: "not_found" as const };
     if (loan.status !== "approved") return { status: "conflict" as const };

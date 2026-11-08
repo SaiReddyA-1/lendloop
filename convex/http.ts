@@ -1,9 +1,10 @@
 import { httpRouter } from "convex/server";
 import { internal } from "./_generated/api";
-import { httpAction } from "./_generated/server";
+import { httpAction, type ActionCtx } from "./_generated/server";
 import { n8nInboundToken } from "./lib/env";
 import { verifyBearer } from "./lib/hmac";
-import { isIsoDate } from "./lib/dates";
+import { isIsoDate, todayUtc } from "./lib/dates";
+import { OVERDUE_CAP, OVERDUE_PAGE_SIZE, OVERDUE_SCAN_MAX, type OverdueLoan } from "./automation";
 
 // Inbound API for n8n (all under /api/n8n/*). Auth: `Authorization: Bearer <N8N_INBOUND_TOKEN>`,
 // compared in constant time. No cookies/CORS: server-to-server only.
@@ -54,12 +55,35 @@ function str(value: unknown, max: number, required: boolean): string | undefined
   return value.slice(0, max);
 }
 
+/** Walks the overdue range in bounded pages: <= OVERDUE_SCAN_MAX rows scanned, <= OVERDUE_CAP loans returned. */
+async function collectOverdue(ctx: ActionCtx): Promise<{ date: string; loans: OverdueLoan[] }> {
+  const date = todayUtc();
+  const loans: OverdueLoan[] = [];
+  let cursor: string | null = null;
+  let scanned = 0;
+  while (loans.length < OVERDUE_CAP && scanned < OVERDUE_SCAN_MAX) {
+    const page: Awaited<ReturnType<typeof runPage>> = await runPage(ctx, date, cursor);
+    loans.push(...page.loans.slice(0, OVERDUE_CAP - loans.length));
+    scanned += page.scanned;
+    if (page.isDone) break;
+    cursor = page.continueCursor;
+  }
+  return { date, loans };
+}
+
+function runPage(ctx: ActionCtx, date: string, cursor: string | null) {
+  return ctx.runQuery(internal.automation.overdueLoansPage, {
+    date,
+    cursor,
+    numItems: OVERDUE_PAGE_SIZE,
+  });
+}
+
 // AUTH: bearer N8N_INBOUND_TOKEN
 export const overdueLoans = httpAction(async (ctx, request) => {
   const denied = await authorizeInbound(request);
   if (denied) return denied;
-  const result = await ctx.runQuery(internal.automation.overdueLoans, {});
-  return json(200, result);
+  return json(200, await collectOverdue(ctx));
 });
 
 // AUTH: bearer N8N_INBOUND_TOKEN

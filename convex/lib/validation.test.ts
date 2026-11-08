@@ -9,6 +9,10 @@ describe("sanitizeText", () => {
     expect(sanitizeText("he\u0000llo\u0007 wor\u001Bld\u007F")).toBe("he llo wor ld");
     expect(sanitizeText("a\u0085b")).toBe("a b");
   });
+  it("strips zero-width, bidi and BOM format characters", () => {
+    expect(sanitizeText("a​b‎c‮d⁦e⁠f﻿g")).toBe("abcdefg");
+    expect(sanitizeText("‮gnp.exe")).toBe("gnp.exe");
+  });
   it("keeps unicode letters and emoji", () => {
     expect(sanitizeText("  Zoë ✓ ")).toBe("Zoë ✓");
   });

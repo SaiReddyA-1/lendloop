@@ -96,7 +96,7 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "// n8n Code node \"Compose reminder\": one email per overdue loan (input = one item per loan after Split Out).\nconst esc = (v) =>\n  String(v)\n    .replace(/&/g, '&amp;')\n    .replace(/</g, '&lt;')\n    .replace(/>/g, '&gt;')\n    .replace(/\"/g, '&quot;')\n    .replace(/'/g, '&#39;');\nconst line = (v) => String(v).replace(/[\\u0000-\\u001F\\u007F-\\u009F]/g, ' ').trim().slice(0, 120);\n\nreturn $input.all().map((item) => {\n  const l = item.json;\n  const tool = line(l.toolName);\n  const name = line(l.borrowerName || 'there');\n  const days = Number(l.daysOverdue) || 0;\n  const body =\n    `\"${tool}\" was due back on ${l.endDate} and is now ${days} day${days === 1 ? '' : 's'} overdue. ` +\n    `Please return it to its owner as soon as you can, or contact them to agree a new date.`;\n  return {\n    json: {\n      loanId: l.loanId,\n      to: l.borrowerEmail,\n      subject: `Overdue: please return ${tool}`,\n      text: `Hi ${name},\\n\\n${body}\\n\\n-- LendLoop`,\n      html: `<p>Hi ${esc(name)},</p><p>${esc(body)}</p><p style=\"color:#666\">LendLoop</p>`,\n    },\n    pairedItem: item.pairedItem,\n  };\n});\n"
+        "jsCode": "// n8n Code node \"Compose reminder\": one email per overdue loan (input = one item per loan after Split Out).\nconst esc = (v) =>\n  String(v)\n    .replace(/&/g, '&amp;')\n    .replace(/</g, '&lt;')\n    .replace(/>/g, '&gt;')\n    .replace(/\"/g, '&quot;')\n    .replace(/'/g, '&#39;');\n// Also strips zero-width/bidi/format chars (spoofing, e.g. RLO) before escaping; mirrors convex/lib/validation.ts sanitizeText.\nconst line = (v) =>\n  String(v)\n    .replace(/[​-‏‪-‮⁠-⁩﻿]/g, '')\n    .replace(/[\\u0000-\\u001F\\u007F-\\u009F]/g, ' ')\n    .trim()\n    .slice(0, 120);\n\nreturn $input.all().map((item) => {\n  const l = item.json;\n  const tool = line(l.toolName);\n  const name = line(l.borrowerName || 'there');\n  const days = Number(l.daysOverdue) || 0;\n  const body =\n    `\"${tool}\" was due back on ${l.endDate} and is now ${days} day${days === 1 ? '' : 's'} overdue. ` +\n    `Please return it to its owner as soon as you can, or contact them to agree a new date.`;\n  return {\n    json: {\n      loanId: l.loanId,\n      to: l.borrowerEmail,\n      subject: `Overdue: please return ${tool}`,\n      text: `Hi ${name},\\n\\n${body}\\n\\n-- LendLoop`,\n      html: `<p>Hi ${esc(name)},</p><p>${esc(body)}</p><p style=\"color:#666\">LendLoop</p>`,\n    },\n    pairedItem: item.pairedItem,\n  };\n});\n"
       },
       "id": "858e3e15-b703-4628-a2ed-eed5f87eec30",
       "name": "Compose reminder",
@@ -225,7 +225,8 @@
       },
       "retryOnFail": true,
       "maxTries": 3,
-      "waitBetweenTries": 5000
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {

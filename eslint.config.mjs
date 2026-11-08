@@ -23,6 +23,7 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     "convex/_generated/**",
     ".convex/**",
+    "scripts/__fixtures__/**", // intentionally broken authz fixtures (never imported)
   ]),
 ]);
 

@@ -1,71 +1,74 @@
 # Security controls map
 
-Standards: OWASP ASVS 5.0 L2, OWASP Top 10 2025, OWASP API Security Top 10 2023. Status: done / partial / planned.
+Standards targeted: OWASP ASVS 5.0 L2, OWASP Top 10 2025, OWASP API Security Top 10 2023. Status: **Done** (implemented and covered by a test or reproducible check), **Partial** (implemented with a stated gap), **Planned** (see `docs/PRODUCTION.md`). Test names are files under `convex/` unless a path is given; `npm run check` runs all automated checks (294 tests in 16 files at last count, plus the `authz:selftest` and `scan:secrets:selftest` lint self-tests).
 
-## OWASP Top 10 2025
+## 1. Brief checklist
+
+| Requirement | Status | Evidence |
+|---|---|---|
+| Server-side validation of all inputs | Done | `v.*` argument validators on every function; domain checks in `convex/lib/validation.ts` (`assertLength`, `sanitizeText` which also strips zero-width/bidi/format characters U+200B-200F, U+202A-202E, U+2060-2069, U+FEFF as well as control characters, `LIMITS`; the n8n compose nodes strip them again, ADR-034), `convex/lib/dates.ts` (`isIsoDate`, range, max 30 days), enum validators, state machine. HTTP inputs validated by hand in `convex/http.ts`. Tests: `lib/validation.test.ts`, `lib/dates.test.ts`, `loans.test.ts`, `tools.test.ts`, `http.test.ts` |
+| Least privilege, ownership checks, no IDOR | Done | Guards `requireUser`, `requireAdmin`, `requireToolOwner`, `requireLoanParty` (`convex/lib/auth.ts`); identity only from `ctx.auth`; foreign objects are `NOT_FOUND` (ADR-009); admins have no loan transitions and cannot edit other users' tools; internal-only functions for CLI/seed/delivery. Tests: `lib/auth.test.ts`, `tools.test.ts`, `loans.test.ts`, `admin.test.ts`, `admin.moderation.test.ts` |
+| Public view exposes the minimum | Done | `tools.listPublic` returns exactly `{name, category}` of active tools; public display names are never derived from the email (name, else givenName + family initial, else "Neighbor", ADR-032); signed-in lists use explicit projections without email, identity ids or tokenIdentifier; `returns:` validators lock shapes. Tests: deep key scans in `tools.test.ts`, `loans.test.ts`, `users.test.ts` |
+| Webhook signing and replay protection | Done | Outbound HMAC-SHA256 over `"<unix-ts>.<rawBody>"` (`X-LendLoop-Signature: sha256=...`, `X-LendLoop-Timestamp`); n8n verifies over raw bytes, rejects `|now-ts| > 300 s`, dedupes event ids (ADR-021, 025, 026). Tests: `lib/hmac.test.ts` (RFC 4231 vector), `notifications.test.ts`; E2E scenarios 1-3 in `n8n/E2E-RESULTS.md` (n8n side is verified manually, not by Vitest) |
+| Authenticated HTTP endpoints | Done | All `/api/n8n/*` routes require `Authorization: Bearer <N8N_INBOUND_TOKEN>`, checked before the body is read; missing or shorter-than-32-char token config -> 503, bad token -> 401 with no detail; 16 KB cap; `no-store`; other methods 405. `npm run authz` fails if an `httpAction` lacks `authorizeInbound(` in code. Tests: `http.test.ts`; E2E 6 |
+| Constant-time comparison | Done | `timingSafeEqualStr` hashes both sides with SHA-256 then compares every byte without early exit (`convex/lib/hmac.ts`); n8n uses `crypto.timingSafeEqual` (`n8n/code/verify-signature.js`). Tests: `lib/hmac.test.ts` |
+| No PII in logs | Done | Delivery log is `{evt, eventId, attempt, code}` only; error codes are short enums; `automationEvents.lastErrorCode` stores a code, never a payload; `workflowErrors` messages are sanitized, email-redacted and truncated at write time; workflow 99 summary redacts emails, bearer tokens and long tokens; n8n does not save successful executions and prunes others after 168 h (compose). Tests: `notifications.test.ts`, `automation.test.ts`, `http.test.ts` |
+| Security headers, CSP, Clerk proxy | Done (CSP Partial vs strict mode) | `next.config.ts`: HSTS (`max-age=63072000; includeSubDomains`, no `preload`: preload is a per-domain opt-in, ADR-039), nosniff, Referrer-Policy, Permissions-Policy, X-Frame-Options DENY, COOP. `proxy.ts`: `clerkMiddleware` with nonce CSP plus `frame-ancestors 'none'`, `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`, scoped `connect-src`; localhost Convex only outside production; `/dashboard` and `/admin` gated (UX only, ADR-002/004/005). No automated test; verify with browser dev tools. Gap: Clerk `strict` / `strict-dynamic` mode not enabled |
+| Rate limiting | Partial | In-transaction indexed counts: 5 pending / 10 per hour / 2 per tool per 24h (requests, `RATE_LIMITED`); 50 active tools and 10 creations per hour (tools); 30-day max loan; `take()` caps (ADR-018/019/033). Does not cover raw call volume or failed calls. Production: `@convex-dev/rate-limiter`, Clerk bot protection, edge limits. Tests: `loans.test.ts`, `tools.test.ts` |
+| Audit trail for admin actions | Done | `auditLog` rows (actor id or `system:bootstrap`/`system:cli`, action, target, sanitized reason <= 200 chars) for role promote/demote, trusted grant/revoke, tool removal, admin re-drive of failed notifications (`automation.retry`) (`convex/lib/audit.ts`); readable only via `admin.listAuditLog`. No UI or function to edit or delete rows; immutability beyond that is a production item. Tests: `admin.test.ts`, `admin.moderation.test.ts`, `users.test.ts` |
+| Secrets only in env, plus scan | Done | Convex env, Next env, n8n env/credentials; `.env*` git-ignored; `convex/lib/env.ts` is the only env reader (lint-enforced); workflow JSON carries credential `{id,name}` only; bootstrap writes credentials to a 0600 temp file and deletes it (POSIX; on Windows only directory ACLs protect it, use `LENDLOOP_TMP`); the n8n encryption key is a file-based Docker secret (`N8N_ENCRYPTION_KEY_FILE`), not an env var (ADR-031); webhook secret and inbound token must be >= 32 chars or the integration fails closed (ADR-036). `scripts/scan-secrets.mjs` in `npm run check` (tripwire; use gitleaks in CI) flags Clerk keys, `whsec_`, JWTs, Convex deploy keys, private keys, bearer tokens, secret-looking assignments and 64-hex strings; it fails (exit 1/2) on findings, git errors and unreadable files, and a line-level `scan-secrets:allow` is the only escape hatch (ADR-038). Evidence: `npm run scan:secrets`, `npm run scan:secrets:selftest` |
+
+## 2. OWASP Top 10 2025
+
 | Category | Control | Status |
 |---|---|---|
-| A01 Broken Access Control | `requireUser`/`requireAdmin`/`requireToolOwner`/`requireLoanParty` (`convex/lib/auth.ts`); identity from `ctx.auth` only; `npm run authz` static guard; proxy gate (UX only). Tests: `convex/lib/auth.test.ts`, `convex/users.test.ts` | partial (guards + users done; feature functions in later phases) |
-| A02 Security Misconfiguration | Static security headers, `poweredByHeader: false`, strict TS, env templates | done |
-| A03 Software Supply Chain Failures | Lockfile, minimal deps, removed unneeded `cn` package, `npm audit` review | partial |
-| A04 Cryptographic Failures | TLS + HSTS preload; tokens handled by Clerk; HMAC-SHA256 for n8n webhooks, verified in n8n (ADR-025) | partial (HSTS done) |
-| A05 Injection | `v.*` arg validation + domain checks; no raw queries; React escaping | planned |
-| A06 Insecure Design | `loanStateMachine.ts` is the only definition of loan transitions; overlap re-check on approve; auto-decline of conflicting requests; owner-only return (ADR-014..017). Tests: `loans.test.ts`, `loanStateMachine.test.ts` | partial (loans/tools done) |
-| A07 Authentication Failures | Delegated to Clerk (MFA, sessions); Convex validates JWT issuer; UNAUTHENTICATED / USER_NOT_PROVISIONED fail-closed; admin by immutable Clerk id. Tests: `users.test.ts`, `auth.test.ts` | done |
-| A08 Software or Data Integrity Failures | Signed n8n webhooks verified in n8n (constant-time, 300 s replay window, dedupe ADR-026); inbound bearer token compared in constant time; 
-pm run scan:secrets guards exports | implemented, E2E-verified (
-8n/E2E-RESULTS.md) |
-| A09 Security Logging and Alerting Failures | Audit log of state changes; no PII in logs | planned |
-| A10 Mishandling of Exceptional Conditions | Generic client errors, typed `ConvexError`, fail-closed guards | planned |
+| A01 Broken Access Control | Guards above; `npm run authz` (tokenizer-based lint with a public-endpoint allowlist and a self-test, ADR-030; a lint, not a proof); every public function declared with `// AUTH:`; proxy gate is UX only. Tests: `lib/auth.test.ts`, `users.test.ts`, `tools.test.ts`, `loans.test.ts`, `admin.test.ts` | Done |
+| A02 Security Misconfiguration | Static headers, CSP, `poweredByHeader: false`, strict TypeScript, env templates with placeholders, compose binds n8n/Mailpit to 127.0.0.1 and pins image tags (ADR-029) | Done |
+| A03 Software Supply Chain Failures | Lockfile, `npm ci`, minimal dependencies (third-party `cn` package removed, ADR-008), pinned n8n and Mailpit images. No automated `npm audit` or Dependabot yet | Partial |
+| A04 Cryptographic Failures | TLS + HSTS (no preload yet, ADR-039); sessions and tokens handled by Clerk; HMAC-SHA256 for webhooks; constant-time compares; distinct secrets per direction. Single-key HMAC, no rotation overlap yet | Partial |
+| A05 Injection | `v.*` validators, no raw queries (Convex), React escaping, `sanitizeText` on free text, n8n email composition HTML-escapes values (E2E 1b) | Done |
+| A06 Insecure Design | One state machine; transactional outbox; overlap re-check on approve and auto-decline; owner-only return; limits (ADR-014..017, 019, 020). Tests: `loanStateMachine.test.ts`, `loans.test.ts` | Done |
+| A07 Authentication Failures | Delegated to Clerk (sessions, MFA options); Convex pins the JWT issuer (`convex/auth.config.ts`); fail-closed `UNAUTHENTICATED`/`USER_NOT_PROVISIONED`; admin by immutable Clerk id; users provisioned from JWT claims only (ADR-010..012). Not exercised against a live Clerk instance by the author | Done (config); live Clerk unverified |
+| A08 Software or Data Integrity Failures | Signed webhooks, dedupe, bearer inbound auth, workflow JSON generated from reviewed source and scanned, no pinData | Done |
+| A09 Security Logging and Alerting Failures | Audit log; PII-free logs; admin-visible failed events (with audited Retry) and workflow errors; cron sweeper re-drives stuck outbox events (ADR-037); error workflow emails the admin. No external alerting or log retention policy | Partial |
+| A10 Mishandling of Exceptional Conditions | Typed `ConvexError` codes with safe messages; fail-closed guards and config checks; delivery retry with classification; 502-for-retry contract; error workflow | Done |
 
-## OWASP API Security Top 10 2023
+## 3. OWASP API Security Top 10 2023
+
 | Category | Control | Status |
 |---|---|---|
-| API1 Broken Object Level Authorization | `requireToolOwner`/`requireLoanParty`; NOT_FOUND for foreign objects (ADR-009). Applied to every tool/loan mutation; admins cannot edit tools or act on loans. Tests: `auth.test.ts`, `tools.test.ts`, `loans.test.ts` | done (tools/loans) |
-| API2 Broken Authentication | Clerk + Convex JWT verification | done (config) |
-| API3 Broken Object Property Level Authorization | `ensureCurrent` takes no args; `me` explicit projection; tools/loans responses are built field-by-field (no doc spreads) with `returns:` validators locking shapes; `listPublic` is exactly `{name, category}`; owner/borrower ids, email, tokenIdentifier never returned; owner derived server-side on request. Tests: `users.test.ts`, `tools.test.ts`, `loans.test.ts` (deep key scans) | done (users/tools/loans) |
-| API4 Unrestricted Resource Consumption | `take()` caps (200 tools / 100 loans; ADR-018), name/description length limits, 50 active tools per user, 5 pending + 10/hour requests per borrower, 30-day max loan (ADR-019). Production: pagination + `@convex-dev/rate-limiter` | partial |
-| API5 Broken Function Level Authorization | `requireAdmin`; admin ops are `internalMutation`s not on `api`; `// AUTH:` + `npm run authz`. Tests: `admin.test.ts`, `auth.test.ts` | partial (foundation done) |
-| API6 Unrestricted Access to Sensitive Business Flows | Request flow: valid/non-past dates, max duration, no self-borrow, no double-booking, no duplicate pending, per-user pending + hourly caps; approve re-checks availability and expiry; only the owner approves/declines/returns, only the borrower cancels; invalid transitions rejected. Tests: `loans.test.ts` | done (rate-limiter service planned) |
-| API7 Server Side Request Forgery | Fixed n8n URL from env; no user-supplied URLs fetched; n8n calls only the fixed LENDLOOP_CONVEX_SITE_URL | implemented |
-| API8 Security Misconfiguration | Headers, CSP, env hygiene | done |
-| API9 Improper Inventory Management | One Convex deployment per env; documented functions | planned |
-| API10 Unsafe Consumption of APIs | Validate n8n inbound payloads with `v.*`; authenticate callers | implemented |
+| API1 Broken Object Level Authorization | `requireToolOwner`/`requireLoanParty`; NOT_FOUND for foreign objects; `automation.listForLoans` silently omits loans the caller is not party to. Tests: `lib/auth.test.ts`, `tools.test.ts`, `loans.test.ts` | Done |
+| API2 Broken Authentication | Clerk + Convex JWT verification; inbound bearer token for n8n | Done |
+| API3 Broken Object Property Level Authorization | `ensureCurrent` takes no args (role, trusted flag, ids never from clients); field-by-field projections; `returns:` validators; owner derived server-side | Done |
+| API4 Unrestricted Resource Consumption | `take()` caps, length limits, per-user limits, bounded overdue scan (100 returned / 1000 scanned, ADR-035), batched bulk operations (1000 per transaction with continuations, ADR-037), 16 KB inbound cap, `listForLoans` max 100 ids, delivery timeout and bounded retries. Pagination and call-volume limiting are production items | Partial |
+| API5 Broken Function Level Authorization | `requireAdmin` on all admin functions; role/demotion mutations are `internalMutation` (not on `api`); admins cannot self-grant trusted. Tests: `admin.test.ts`, `admin.moderation.test.ts` | Done |
+| API6 Unrestricted Access to Sensitive Business Flows | Request flow validation (dates, duration, no self-borrow, no double-booking, no duplicate pending, caps); approve re-checks availability and expiry; only owner approves/declines/returns, only borrower cancels. Tests: `loans.test.ts` | Done (rate-limiter service planned) |
+| API7 Server Side Request Forgery | Only fixed URLs from env are fetched (`N8N_WEBHOOK_URL`, n8n's `LENDLOOP_CONVEX_SITE_URL`); no user-supplied URLs; `redirect: "error"` | Done |
+| API8 Security Misconfiguration | Headers, CSP, env hygiene, fail-closed missing secrets, loopback-bound services | Done |
+| API9 Improper Inventory Management | Routes listed in the README and `convex/http.ts` (explicit 405 for other methods); one Convex deployment per environment recommended in `docs/PRODUCTION.md`; no API versioning or generated inventory | Partial |
+| API10 Unsafe Consumption of APIs | Inbound n8n payloads validated, capped, sanitized and email-redacted; reminder idempotency key computed server-side (ADR-023); n8n responses classified by status code | Done |
 
-## Phase 1 specifics
-- Headers (`next.config.ts`): HSTS, nosniff, Referrer-Policy, Permissions-Policy, X-Frame-Options, COOP. done
-- CSP (`proxy.ts` via Clerk): frame-ancestors, object-src, base-uri, form-action, Convex connect-src. done
-- Secrets hygiene: `.env*` ignored (templates allowed), `convex.env.example`, secrets only in env. done
-- Accessibility baseline (WCAG 2.2 AA): skip link, focus ring, reduced motion, contrast-checked tokens. done
+## 4. Details
 
-## Phase 2 specifics
-- Schema for all tables with indexes for owner/borrower/status queries and rate limiting. done
-- Audit log (`convex/lib/audit.ts`): role changes written with actor label (`user`, `system:bootstrap`, `system:cli`); reasons sanitized and capped. done (A09 partial)
-- Validation helpers (`assertLength`, `sanitizeText`) and shared validators in `convex/lib/validation.ts`. done
-- Env access centralized in `convex/lib/env.ts`. done
+**Webhook protocol (Convex to n8n).** `deliver` (`convex/notifications.ts`) builds the minimal payload, serializes once, signs `"<ts>.<rawBody>"` with `N8N_WEBHOOK_SECRET` and sends the identical string. Headers: `X-LendLoop-Timestamp`, `X-LendLoop-Signature`, `X-LendLoop-Event-Id`, `Idempotency-Key` (= event id). Timestamp and signature are recomputed on every attempt. Timeout 30 s, `redirect: "error"`. Retry 408/429/5xx/network/timeout with 30 s, 2 min, 8 min, 30 min backoff, 5 attempts total; other 4xx fail immediately. Missing URL or secret (or a secret shorter than 32 chars) -> `NOT_CONFIGURED`, no call; an `http:` URL outside loopback hosts (localhost, 127.0.0.1, host.docker.internal, [::1]) -> `INSECURE_WEBHOOK_URL`, because the payload contains recipient name and email (ADR-036). HTTP 401 from n8n is permanent (bad signature or clock skew beyond the 300 s tolerance; keep Convex and n8n clocks on NTP). A cron (`maintenance.sweepStuckEvents`, every 10 min) re-schedules events stuck in `pending`, and admins can re-drive `failed` events (`admin.retryAutomationEvent`).
 
-## Phase 3 specifics
-- Tools + loans functions (`convex/tools.ts`, `convex/loans.ts`): every export has `// AUTH:` and a guard (`npm run authz`); `listPublic` is the only unauthenticated function.
-- `loans.request` validates in a fixed order with distinct safe messages; free text passes `sanitizeText` + `assertLength`.
-- Outbox rows (`automationEvents`) hold ids/type only; written in the same transaction as every state change. Delivery in phase 6.
+**n8n side.** Workflow 1 checks required headers, `|now - ts| <= 300 s`, HMAC over the raw bytes (webhook option Raw Body) with `timingSafeEqual`; failure -> bare 401. Already-emailed event ids are skipped with `200 duplicate`. The secret is `LENDLOOP_WEBHOOK_SECRET` in n8n env (ADR-025). Residual risk: `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` still exposes `LENDLOOP_WEBHOOK_SECRET` (and the rest of the process env) to workflow editors (accepted, ADR-025/031), so editor access must be limited to trusted admins. The inbound bearer token is in an encrypted Header Auth credential created by `n8n/scripts/bootstrap.*`.
 
-## Phase 5-6 specifics (admin moderation + n8n automation)
-- Webhook signing (Convex -> n8n, A08/API10): `X-LendLoop-Signature: sha256=<hex HMAC-SHA256(N8N_WEBHOOK_SECRET, "<unix-ts>.<rawBody>")>`; the same raw string that is signed is sent. n8n MUST verify the signature and reject `|now - X-LendLoop-Timestamp| > 300 s` (replay window) and may de-duplicate on `Idempotency-Key`. Fixed URL from env only (no user-supplied URLs, API7); `redirect: "error"`; 10 s timeout.
-- Constant-time comparisons (`convex/lib/hmac.ts`): `timingSafeEqualStr` compares SHA-256 digests byte by byte without early exit (no length leak); `verifyBearer` fails closed on missing/malformed header or empty expected token. Test vector: RFC 4231 case 2.
-- Inbound auth (`/api/n8n/*`): bearer token only, checked before the body is read; missing config -> 503 `not_configured`; bad/missing token -> 401 `unauthorized` with no detail; body cap 16 KB (413); non-JSON 400; other methods 405; `Cache-Control: no-store`. `npm run authz` requires every `httpAction` to call `authorizeInbound(` (which must call `verifyBearer(`).
-- Payload minimization: outbound payload is exactly `eventId, eventType, loanId, toolName, loanStatus, startDate, endDate, recipient{name, email}`. No user ids, description, or other party's email. Inbound overdue list is exactly `loanId, toolName, borrowerName, borrowerEmail, endDate, daysOverdue, idempotencyKey`.
-- Logging policy (A09): delivery logs only `{evt, eventId, attempt, code}`; error codes are short enums (`HTTP_503`, `TIMEOUT`, `NETWORK`, `NOT_CONFIGURED`, `NO_RECIPIENT_EMAIL`, `WORKFLOW_ERROR`). Workflow-error write-back is sanitized, email-redacted and truncated (300 chars). Admin actions (`tool.remove`, trusted grant/revoke) are audited with actor and reason; failed deliveries and workflow errors are visible to admins (`listWorkflowErrors`, event status) so failures alert a human rather than vanish.
-- API8 misconfiguration: three env vars are read only in `convex/lib/env.ts`; unset secrets disable the integration instead of falling back to a default; `convex.env.example` holds placeholders only.
-- Admin API (API5): every `admin.*` function calls `requireAdmin`; projections exclude email, Clerk ids and tokenIdentifier; admins cannot change their own trusted status. `automation.listForLoans` silently omits loans the caller is not a party to (no existence leak, API1).
+**Data minimization.** Outbound webhook: `eventId, eventType, loanId, toolName, loanStatus, startDate, endDate, recipient{name, email}`. Overdue list to n8n: `loanId, toolName, borrowerName, borrowerEmail, endDate, daysOverdue, idempotencyKey`. The outbox (`automationEvents`) stores ids, type, status and error code only; recipient and tool name are resolved at send time. Owners see a borrower's name and trusted flag, never email.
 
-## Phase 7 specifics (n8n workflows)
-- n8n verifies every webhook: required headers, |now - ts| <= 300 s, HMAC over the raw bytes, constant-time compare; failures return a bare 401. The secret is LENDLOOP_WEBHOOK_SECRET (n8n env, ADR-025), never in workflow JSON.
-- Replays: emailed event ids are remembered (newest 500) and answered duplicate (ADR-026). Email failure -> 502 so Convex retries (ADR-027).
-- Workflow exports carry credential {id,name} only (no data, no pinData); scripts/scan-secrets.mjs (in 
-pm run check) fails on Clerk keys, bearer tokens, private keys, long hex values and credential data in 
-8n/workflows/*.json.
-- Inbound token lives in an encrypted n8n Header Auth credential created by 
-8n/scripts/bootstrap.* from env (temp file deleted). Residual risk: N8N_BLOCK_ENV_ACCESS_IN_NODE=false lets workflow editors read n8n env; restrict editor access.
-- Error workflow sends only a redacted, 300-char summary (no payload, emails/tokens stripped) to the admin and Convex.
-- n8n/Mailpit bind to 127.0.0.1; in production expose only the webhook path over HTTPS (ADR-029). N8N_SECURE_COOKIE=false is local-only.
-- Seed (convex/seed.ts) is internal-only; scripts/seed-clerk-users.mjs refuses non-sk_test_ keys.
+**Inbound HTTP.** Bearer verified before reading the body; 413 above 16 KB, 400 for non-JSON or non-object; reminder bodies accept only `loanId`, ISO `reminderDate` (window: today ±1 day), `outcome` in `sent|failed`; error write-back fields are length-capped, sanitized and email-redacted again server-side.
+
+**Admin and audit.** Admin API (`convex/admin.ts`) projections exclude email, Clerk ids and tokenIdentifier; target labels are resolved server-side. Admin removal cancels pending requests but keeps approved loans (ADR-022). The env admin allowlist never demotes (ADR-011).
+
+**Seed and CLI.** `convex/seed.ts` and `admin:*` role mutations are internal; seeded placeholder users use `tokenIdentifier` `seed|...` that no Clerk token can match; `scripts/seed-clerk-users.mjs` refuses non-`sk_test_` keys and takes the password from env.
+
+**Infrastructure.** `n8n/docker-compose.yml` binds n8n and Mailpit UI to 127.0.0.1, keeps SMTP on the compose network, pins images, disables telemetry, saves no successful execution data. The encryption key is mounted from `n8n/secrets/n8n_encryption_key` (`N8N_ENCRYPTION_KEY_FILE`), never `.env`. `N8N_SECURE_COOKIE=false` and plain-http n8n are local-only. In production expose only the webhook path over HTTPS (ADR-029).
+
+## 5. Known gaps (all tracked in `docs/PRODUCTION.md`)
+
+- Single-secret HMAC and bearer token (no overlap-window rotation).
+- Overdue scan reads at most 1000 rows per run; HSTS preload deliberately not enabled yet.
+- Call-volume rate limiting, pagination, external alerting, dependency audit and gitleaks in CI.
+- CSP in Clerk's nonce mode, not `strict-dynamic`; no CSP reporting.
+- Docker/Mailpit path and signed-in flows against real Clerk not exercised by the author.
+- `/dev/preview` is dev-only (404 in production) but present in the repository.

@@ -10,9 +10,11 @@
 
 import type * as admin from "../admin.js";
 import type * as automation from "../automation.js";
+import type * as crons from "../crons.js";
 import type * as http from "../http.js";
 import type * as lib_audit from "../lib/audit.js";
 import type * as lib_auth from "../lib/auth.js";
+import type * as lib_autoDecline from "../lib/autoDecline.js";
 import type * as lib_dates from "../lib/dates.js";
 import type * as lib_env from "../lib/env.js";
 import type * as lib_errors from "../lib/errors.js";
@@ -22,6 +24,7 @@ import type * as lib_notify from "../lib/notify.js";
 import type * as lib_toolRemoval from "../lib/toolRemoval.js";
 import type * as lib_validation from "../lib/validation.js";
 import type * as loans from "../loans.js";
+import type * as maintenance from "../maintenance.js";
 import type * as notifications from "../notifications.js";
 import type * as seed from "../seed.js";
 import type * as tools from "../tools.js";
@@ -36,9 +39,11 @@ import type {
 declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   automation: typeof automation;
+  crons: typeof crons;
   http: typeof http;
   "lib/audit": typeof lib_audit;
   "lib/auth": typeof lib_auth;
+  "lib/autoDecline": typeof lib_autoDecline;
   "lib/dates": typeof lib_dates;
   "lib/env": typeof lib_env;
   "lib/errors": typeof lib_errors;
@@ -48,6 +53,7 @@ declare const fullApi: ApiFromModules<{
   "lib/toolRemoval": typeof lib_toolRemoval;
   "lib/validation": typeof lib_validation;
   loans: typeof loans;
+  maintenance: typeof maintenance;
   notifications: typeof notifications;
   seed: typeof seed;
   tools: typeof tools;

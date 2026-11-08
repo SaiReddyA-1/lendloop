@@ -71,6 +71,7 @@ export const auditActionValidator = v.union(
   v.literal("user.trusted.grant"),
   v.literal("user.trusted.revoke"),
   v.literal("tool.remove"),
+  v.literal("automation.retry"),
 );
 export const auditTargetTypeValidator = v.union(
   v.literal("user"),
@@ -87,14 +88,18 @@ export const LIMITS = {
   MAX_LOAN_DAYS: 30,
   MAX_PENDING_PER_BORROWER: 5,
   MAX_REQUESTS_PER_HOUR: 10,
+  MAX_REQUESTS_PER_TOOL_PER_DAY: 2,
+  MAX_TOOL_CREATES_PER_HOUR: 10,
 } as const;
 
 // Control chars (C0, DEL, C1).
 const CONTROL_CHARS = /[\u0000-\u001F\u007F-\u009F]/g;
+// Zero-width, bidi override/isolate and BOM format chars: invisible, enable spoofing (e.g. RLO). Removed outright.
+const FORMAT_CHARS = /[​-‏‪-‮⁠-⁩﻿]/g;
 
-/** Strip control characters, collapse whitespace runs into one space, trim. */
+/** Strip zero-width/bidi format chars and control characters, collapse whitespace runs into one space, trim. */
 export function sanitizeText(value: string): string {
-  return value.replace(CONTROL_CHARS, " ").replace(/\s+/g, " ").trim();
+  return value.replace(FORMAT_CHARS, "").replace(CONTROL_CHARS, " ").replace(/\s+/g, " ").trim();
 }
 
 /**

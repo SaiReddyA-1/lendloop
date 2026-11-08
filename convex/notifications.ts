@@ -1,13 +1,13 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
-import { n8nWebhookSecret, n8nWebhookUrl } from "./lib/env";
+import { isAllowedWebhookUrl, n8nWebhookSecret, n8nWebhookUrl } from "./lib/env";
 import { signWebhook } from "./lib/hmac";
 
 /** Max delivery attempts per event (first try + retries). Single source of truth. */
 export const MAX_ATTEMPTS = 5;
 /** Delay before retry N (index 0 = after attempt 1). Length must be MAX_ATTEMPTS - 1. */
-export const BACKOFF_MS = [30_000, 120_000, 480_000, 1_800_000, 7_200_000] as const;
+export const BACKOFF_MS = [30_000, 120_000, 480_000, 1_800_000] as const;
 // Must exceed n8n WF1 worst case (email node: 3 tries x 5s wait) so Convex does not time out while n8n is still retrying.
 export const DELIVERY_TIMEOUT_MS = 30_000;
 
@@ -167,6 +167,16 @@ export const deliver = internalAction({
     if (!url || !secret) {
       await ctx.runMutation(internal.notifications.markFailed, { eventId, code: "NOT_CONFIGURED" });
       log(eventId, 0, "NOT_CONFIGURED");
+      return null;
+    }
+
+    // The payload contains recipient PII: refuse non-TLS destinations (except loopback/docker host in dev).
+    if (!isAllowedWebhookUrl(url)) {
+      await ctx.runMutation(internal.notifications.markFailed, {
+        eventId,
+        code: "INSECURE_WEBHOOK_URL",
+      });
+      log(eventId, 0, "INSECURE_WEBHOOK_URL");
       return null;
     }
 

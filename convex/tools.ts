@@ -15,6 +15,8 @@ import {
 
 const LIST_CAP = 200; // ADR: take() caps instead of pagination for now.
 const MAX_ACTIVE_TOOLS_PER_USER = 50;
+const REMOVED_CAP = 50; // listMine shows at most this many removed tools (after all active ones)
+const HOUR_MS = 3_600_000;
 
 const toolItemValidator = v.object({
   _id: v.id("tools"),
@@ -124,11 +126,18 @@ export const listMine = query({
   ),
   handler: async (ctx) => {
     const me = await requireUser(ctx);
-    const tools = await ctx.db
+    // Active and removed are read separately (active first) so a pile of removed rows can never hide active tools.
+    const activeTools = await ctx.db
       .query("tools")
-      .withIndex("by_owner", (q) => q.eq("ownerId", me._id))
+      .withIndex("by_owner", (q) => q.eq("ownerId", me._id).eq("status", "active"))
       .order("desc")
       .take(LIST_CAP);
+    const removedTools = await ctx.db
+      .query("tools")
+      .withIndex("by_owner", (q) => q.eq("ownerId", me._id).eq("status", "removed"))
+      .order("desc")
+      .take(REMOVED_CAP);
+    const tools = [...activeTools, ...removedTools];
     const pendingLoans = await ctx.db
       .query("loans")
       .withIndex("by_owner", (q) => q.eq("ownerId", me._id).eq("status", "pending"))
@@ -183,7 +192,7 @@ function cleanDescription(raw: string): string {
   return assertLength("Description", sanitizeText(raw), 0, LIMITS.DESCRIPTION_MAX);
 }
 
-// AUTH: requireUser. Owner is the caller; capped at 50 active tools per user (API4).
+// AUTH: requireUser. Owner is the caller; capped at 50 active tools per user and 10 creations per hour (API4).
 export const create = mutation({
   args: {
     name: v.string(),
@@ -207,6 +216,16 @@ export const create = mutation({
       );
     }
     const now = Date.now();
+    // Creation rate limit (rolling hour, counts removed tools too) against listing spam.
+    const recent = await ctx.db
+      .query("tools")
+      .withIndex("by_owner_created", (q) =>
+        q.eq("ownerId", me._id).gte("createdAt", now - HOUR_MS),
+      )
+      .take(LIMITS.MAX_TOOL_CREATES_PER_HOUR);
+    if (recent.length >= LIMITS.MAX_TOOL_CREATES_PER_HOUR) {
+      throw appError("RATE_LIMITED", "You're adding tools too quickly. Please try again later.");
+    }
     return ctx.db.insert("tools", {
       ownerId: me._id,
       name,

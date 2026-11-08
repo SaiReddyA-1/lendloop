@@ -213,9 +213,12 @@ describe("loans.request validation", () => {
     );
   });
   it("rate limit: at most 10 requests per hour, reset after the hour", async () => {
-    const { as, toolId, req } = await setup();
+    const { t, as, toolId, req } = await setup();
+    // Distinct tools so the per-tool daily cooldown does not trigger first.
     for (let i = 0; i < 10; i++) {
-      const loanId = await req("user_a", "2026-11-10", "2026-11-11");
+      const owner = await makeUser(t, `hour_owner_${i}`);
+      const tool = await makeTool(t, owner._id);
+      const loanId = await req("user_a", "2026-11-10", "2026-11-11", tool);
       await as("user_a").mutation(api.loans.cancel, { loanId });
     }
     await expect(req("user_a", "2026-11-10", "2026-11-11")).rejects.toMatchObject(
@@ -227,6 +230,27 @@ describe("loans.request validation", () => {
         toolId,
         startDate: "2026-11-10",
         endDate: "2026-11-11",
+      }),
+    ).resolves.toBeTruthy();
+  });
+  it("cooldown: at most 2 requests per borrower per tool in 24h, even when cancelled", async () => {
+    const { as, req, toolId } = await setup();
+    for (let i = 0; i < 2; i++) {
+      const loanId = await req("user_a", "2026-11-10", "2026-11-11");
+      await as("user_a").mutation(api.loans.cancel, { loanId });
+    }
+    await expect(req("user_a", "2026-11-10", "2026-11-11")).rejects.toMatchObject(
+      fail("RATE_LIMITED"),
+    );
+    // Another borrower, and the same borrower on a different tool, are unaffected.
+    await expect(req("user_c", "2026-11-10", "2026-11-11")).resolves.toBeTruthy();
+    // After the rolling 24h window the cooldown lifts.
+    vi.setSystemTime(new Date("2026-11-09T12:00:01.000Z"));
+    await expect(
+      as("user_a").mutation(api.loans.request, {
+        toolId,
+        startDate: "2026-11-12",
+        endDate: "2026-11-13",
       }),
     ).resolves.toBeTruthy();
   });

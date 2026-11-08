@@ -3,9 +3,11 @@ import { internal } from "../_generated/api";
 import type { MutationCtx } from "../_generated/server";
 
 /**
- * Transactional outbox (phase-3 stub). Every loan state change MUST call this
- * in the same mutation, so the event is committed atomically with the change.
- * Rows carry ids only (no PII); delivery resolves recipients at send time.
+ * Transactional outbox. Every loan state change MUST call this in the same
+ * mutation, so the event is committed atomically with the change. It inserts a
+ * `pending` automationEvents row and schedules `internal.notifications.deliver`
+ * (runs after commit, retries with backoff; `maintenance.sweepStuckEvents` is the
+ * safety net). Rows carry ids only (no PII); delivery resolves recipients at send time.
  */
 export async function enqueueLoanEvent(
   ctx: MutationCtx,

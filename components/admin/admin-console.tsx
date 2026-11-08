@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   AuditPanel,
   ErrorsPanel,
+  FailedEventsPanel,
   ListingsPanel,
   LoansPanel,
   UsersPanel,
@@ -52,7 +53,14 @@ function AuditContainer() {
 }
 
 function ErrorsContainer() {
-  return <ErrorsPanel rows={useQuery(api.admin.listWorkflowErrors)} />;
+  const failed = useQuery(api.admin.listFailedAutomationEvents);
+  const errors = useQuery(api.admin.listWorkflowErrors);
+  return (
+    <>
+      <FailedEventsPanel rows={failed} />
+      <ErrorsPanel rows={errors} />
+    </>
+  );
 }
 
 /** Tabbed console; the active tab lives in `?tab=` (wrap in <Suspense>: uses useSearchParams). */

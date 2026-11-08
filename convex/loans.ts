@@ -1,6 +1,8 @@
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query, type QueryCtx } from "./_generated/server";
+import { internal } from "./_generated/api";
+import { declineOverlappingPending } from "./lib/autoDecline";
 import { requireLoanParty, requireUser } from "./lib/auth";
 import {
   daysBetweenInclusive,
@@ -16,6 +18,7 @@ import { categoryValidator, LIMITS, loanStatusValidator } from "./lib/validation
 
 const LIST_CAP = 100; // ADR: take() caps instead of pagination for now.
 const HOUR_MS = 3_600_000;
+const DAY_MS = 24 * HOUR_MS;
 const ALL_STATUSES = ["pending", "approved", "declined", "cancelled", "returned"] as const;
 
 const displayStatusValidator = v.union(
@@ -164,6 +167,21 @@ export const request = mutation({
       throw appError("RATE_LIMITED", "You're sending requests too quickly. Please try again later.");
     }
 
+    // Per (borrower, tool) cooldown: counts requests of ANY status (incl. cancelled) in a rolling 24h, so
+    // request/cancel cycling cannot spam an owner with notification emails.
+    const recentForTool = await ctx.db
+      .query("loans")
+      .withIndex("by_borrower_tool_created", (q) =>
+        q.eq("borrowerId", me._id).eq("toolId", tool._id).gte("createdAt", now - DAY_MS),
+      )
+      .take(LIMITS.MAX_REQUESTS_PER_TOOL_PER_DAY);
+    if (recentForTool.length >= LIMITS.MAX_REQUESTS_PER_TOOL_PER_DAY) {
+      throw appError(
+        "RATE_LIMITED",
+        "You've already asked for this item a couple of times today. Please try again tomorrow.",
+      );
+    }
+
     const loanId = await ctx.db.insert("loans", {
       toolId: tool._id,
       ownerId: tool.ownerId,
@@ -179,7 +197,7 @@ export const request = mutation({
   },
 });
 
-// AUTH: requireLoanParty (owner). Re-checks availability, then auto-declines overlapping pending requests (ADR-015).
+// AUTH: requireLoanParty (owner). Re-checks availability, then auto-declines overlapping pending requests (ADR-014).
 export const approve = mutation({
   args: { loanId: v.id("loans") },
   returns: v.null(),
@@ -206,19 +224,12 @@ export const approve = mutation({
       recipientRole: "borrower",
     });
 
-    const pending = await ctx.db
-      .query("loans")
-      .withIndex("by_tool_status", (q) => q.eq("toolId", loan.toolId).eq("status", "pending"))
-      .take(200);
-    for (const other of pending) {
-      if (other._id === loan._id) continue;
-      if (!rangesOverlap(loan.startDate, loan.endDate, other.startDate, other.endDate)) continue;
-      assertTransition(other.status, "declined", "owner");
-      await ctx.db.patch("loans", other._id, { status: "declined", decidedAt: now, updatedAt: now });
-      await enqueueLoanEvent(ctx, {
-        loanId: other._id,
-        type: "request_declined",
-        recipientRole: "borrower",
+    // Bounded batch; a scheduled continuation handles any backlog beyond BULK_BATCH_SIZE (L8).
+    const { nextAfter } = await declineOverlappingPending(ctx, { ...loan, status: "approved" });
+    if (nextAfter !== null) {
+      await ctx.scheduler.runAfter(0, internal.maintenance.continueAutoDecline, {
+        loanId: loan._id,
+        afterCreationTime: nextAfter,
       });
     }
     return null;
@@ -260,7 +271,7 @@ export const cancel = mutation({
   },
 });
 
-// AUTH: requireLoanParty (owner). Only the lender can confirm the tool is back (ADR-016).
+// AUTH: requireLoanParty (owner). Only the lender can confirm the tool is back (ADR-015).
 export const markReturned = mutation({
   args: { loanId: v.id("loans") },
   returns: v.null(),

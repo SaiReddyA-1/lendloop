@@ -151,6 +151,17 @@ describe("tools: input validation", () => {
       data: { code: "RATE_LIMITED" },
     });
   });
+  it("rate limit: at most 10 tool creations per hour (resets after the hour)", async () => {
+    const { as } = await setup();
+    for (let i = 0; i < 10; i++) await as("user_a").mutation(api.tools.create, valid);
+    await expect(as("user_a").mutation(api.tools.create, valid)).rejects.toMatchObject({
+      data: { code: "RATE_LIMITED" },
+    });
+    // Other users are unaffected.
+    await expect(as("user_b").mutation(api.tools.create, valid)).resolves.toBeTruthy();
+    vi.setSystemTime(new Date("2026-11-08T13:00:01.000Z"));
+    await expect(as("user_a").mutation(api.tools.create, valid)).resolves.toBeTruthy();
+  });
   it("owner is the caller, never client-supplied", async () => {
     const { t, a, as } = await setup();
     const id = await as("user_a").mutation(api.tools.create, valid);
@@ -209,6 +220,29 @@ describe("tools.remove", () => {
     await expect(as("user_a").query(api.tools.get, { toolId })).rejects.toMatchObject({
       data: { code: "NOT_FOUND" },
     });
+  });
+  it("listMine lists all active tools first even when many removed tools exist", async () => {
+    const { t, a, as } = await setup();
+    // 260 removed tools created AFTER the active ones would previously crowd them out of a single take().
+    const activeId = await makeTool(t, a._id);
+    await t.run(async (ctx) => {
+      for (let i = 0; i < 260; i++) {
+        await ctx.db.insert("tools", {
+          ownerId: a._id,
+          name: `Gone ${i}`,
+          category: "other",
+          condition: "good",
+          description: "",
+          status: "removed",
+          createdAt: 2 + i,
+          updatedAt: 2 + i,
+        });
+      }
+    });
+    const mine = await as("user_a").query(api.tools.listMine, {});
+    expect(mine[0]?._id).toBe(activeId);
+    expect(mine[0]?.status).toBe("active");
+    expect(mine.filter((m) => m.status === "removed")).toHaveLength(50);
   });
   it("flags admin-removed tools in listMine", async () => {
     const { t, b, admin, as } = await setup();

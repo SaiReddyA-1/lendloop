@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
   internalMutation,
@@ -17,6 +18,7 @@ import {
   assertLength,
   auditActionValidator,
   auditTargetTypeValidator,
+  automationEventTypeValidator,
   categoryValidator,
   LIMITS,
   loanStatusValidator,
@@ -339,5 +341,78 @@ export const listWorkflowErrors = query({
       message: r.message,
       ...(r.loanId ? { loanId: r.loanId } : {}),
     }));
+  },
+});
+
+const FAILED_EVENTS_CAP = 100;
+
+// AUTH: requireAdmin. Failed outbox events (newest failure first) for manual re-drive. Ids/codes/tool name only: no emails, no payloads.
+export const listFailedAutomationEvents = query({
+  args: {},
+  returns: v.array(
+    v.object({
+      _id: v.id("automationEvents"),
+      type: automationEventTypeValidator,
+      lastErrorCode: v.optional(v.string()),
+      attempts: v.number(),
+      updatedAt: v.number(),
+      toolName: v.string(),
+    }),
+  ),
+  handler: async (ctx) => {
+    await requireAdmin(ctx);
+    const rows = await ctx.db
+      .query("automationEvents")
+      .withIndex("by_status_updatedAt", (q) => q.eq("status", "failed"))
+      .order("desc")
+      .take(FAILED_EVENTS_CAP);
+    return Promise.all(
+      rows.map(async (e) => {
+        const loan = await ctx.db.get("loans", e.loanId);
+        const tool = loan ? await ctx.db.get("tools", loan.toolId) : null;
+        return {
+          _id: e._id,
+          type: e.type,
+          ...(e.lastErrorCode ? { lastErrorCode: e.lastErrorCode } : {}),
+          attempts: e.attempts,
+          updatedAt: e.updatedAt,
+          toolName: tool?.name ?? "Removed tool",
+        };
+      }),
+    );
+  },
+});
+
+// AUTH: requireAdmin. Re-drives ONE failed event: resets attempts, back to pending, schedules delivery. Audited.
+// Only `failed` events qualify; `workflow_error` rows are admin-only records with no recipient, so they are rejected.
+export const retryAutomationEvent = mutation({
+  args: { eventId: v.id("automationEvents") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const admin = await requireAdmin(ctx);
+    const event = await ctx.db.get("automationEvents", args.eventId);
+    if (!event) throw appError("NOT_FOUND", "We could not find that item.");
+    if (event.status !== "failed") {
+      throw appError("CONFLICT", "Only failed events can be retried.");
+    }
+    if (event.type === "workflow_error" || event.type === "overdue_reminder") {
+      throw appError("CONFLICT", "This kind of event can't be retried from here.");
+    }
+    await ctx.db.patch("automationEvents", event._id, {
+      status: "pending",
+      attempts: 0,
+      lastErrorCode: undefined,
+      nextAttemptAt: undefined,
+      updatedAt: Date.now(),
+    });
+    await ctx.scheduler.runAfter(0, internal.notifications.deliver, { eventId: event._id });
+    await writeAudit(ctx, {
+      actor: admin,
+      action: "automation.retry",
+      targetType: "loan",
+      targetId: event.loanId,
+      reason: `Retry ${event.type}`,
+    });
+    return null;
   },
 });

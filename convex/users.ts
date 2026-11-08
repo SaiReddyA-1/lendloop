@@ -3,11 +3,23 @@ import { writeAudit } from "./lib/audit";
 import { getIdentityOrThrow, isAdminAllowlisted, requireUser } from "./lib/auth";
 import { LIMITS, sanitizeText } from "./lib/validation";
 
-function displayName(identity: { name?: string; givenName?: string; email?: string }): string {
-  const candidates = [identity.name, identity.givenName, identity.email?.split("@")[0]];
-  for (const c of candidates) {
-    const cleaned = c ? sanitizeText(c).slice(0, LIMITS.USER_NAME_MAX).trim() : "";
-    if (cleaned) return cleaned;
+/** Cleans a candidate display name; rejects empty values and anything containing "@" (looks like an email). */
+function cleanCandidate(raw: string | undefined): string {
+  const cleaned = raw ? sanitizeText(raw).slice(0, LIMITS.USER_NAME_MAX).trim() : "";
+  return cleaned.includes("@") ? "" : cleaned;
+}
+
+/**
+ * Public display name (shown to other users). NEVER derived from the email address (privacy, M4):
+ * name -> givenName (+ initial of familyName) -> "Neighbor".
+ */
+function displayName(identity: { name?: string; givenName?: string; familyName?: string }): string {
+  const full = cleanCandidate(identity.name);
+  if (full) return full;
+  const given = cleanCandidate(identity.givenName);
+  if (given) {
+    const initial = Array.from(cleanCandidate(identity.familyName))[0];
+    return initial ? `${given} ${initial.toUpperCase()}.` : given;
   }
   return "Neighbor";
 }

@@ -10,7 +10,13 @@ const esc = (v) =>
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 // Header-injection guard for the subject (CR/LF/control chars out, length cap).
-const line = (v) => String(v).replace(/[\u0000-\u001F\u007F-\u009F]/g, ' ').trim().slice(0, 120);
+// Also strips zero-width/bidi/format chars (spoofing, e.g. RLO) before escaping; mirrors convex/lib/validation.ts sanitizeText.
+const line = (v) =>
+  String(v)
+    .replace(/[​-‏‪-‮⁠-⁩﻿]/g, '')
+    .replace(/[\u0000-\u001F\u007F-\u009F]/g, ' ')
+    .trim()
+    .slice(0, 120);
 
 const tool = line(p.toolName);
 const name = line(p.recipient.name || 'there');

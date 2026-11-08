@@ -44,7 +44,8 @@ export default defineSchema({
     // eslint-disable-next-line @convex-dev/no-duplicate-indexes
     .index("by_status", ["status"])
     .index("by_status_category", ["status", "category"])
-    .index("by_owner", ["ownerId", "status"]),
+    .index("by_owner", ["ownerId", "status"])
+    .index("by_owner_created", ["ownerId", "createdAt"]),
 
   loans: defineTable({
     toolId: v.id("tools"),
@@ -62,7 +63,8 @@ export default defineSchema({
     .index("by_borrower", ["borrowerId", "status"])
     .index("by_owner", ["ownerId", "status"])
     .index("by_status_endDate", ["status", "endDate"])
-    .index("by_borrower_created", ["borrowerId", "createdAt"]),
+    .index("by_borrower_created", ["borrowerId", "createdAt"])
+    .index("by_borrower_tool_created", ["borrowerId", "toolId", "createdAt"]),
 
   automationEvents: defineTable({
     loanId: v.id("loans"),
@@ -77,7 +79,8 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_loan", ["loanId", "createdAt"])
-    .index("by_status", ["status"]),
+    // Sweeper (stuck pending) and admin failed-event list; sorted by updatedAt within a status.
+    .index("by_status_updatedAt", ["status", "updatedAt"]),
 
   reminders: defineTable({
     idempotencyKey: v.string(), // `${loanId}:${YYYY-MM-DD}`

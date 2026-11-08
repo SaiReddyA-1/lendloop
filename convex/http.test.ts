@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { collectKeys, makeLoan, makeTool, makeUser, newT, NOW_ISO, TODAY } from "../tests/helpers";
 
-const TOKEN = "inbound-test-token";
+const TOKEN = "inbound-test-token-0123456789abcdef0123456789abcdef"; // scan-secrets:allow test value
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -61,6 +61,17 @@ describe("inbound auth", () => {
         expect(res.headers.get("Cache-Control")).toBe("no-store");
       }
     }
+  });
+
+  it("503 not_configured when the token is shorter than 32 chars (fails closed even with the matching bearer)", async () => {
+    vi.stubEnv("N8N_INBOUND_TOKEN", "short-token-31-chars-aaaaaaaaaa");
+    const t = newT();
+    const res = await t.fetch("/api/n8n/health", {
+      method: "GET",
+      headers: { Authorization: "Bearer short-token-31-chars-aaaaaaaaaa" }, // scan-secrets:allow test value
+    });
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ error: "not_configured" });
   });
 
   it("503 not_configured when the token env is missing (even with a bearer header)", async () => {
@@ -142,6 +153,59 @@ describe("GET /api/n8n/overdue-loans", () => {
   });
 });
 
+describe("GET /api/n8n/overdue-loans bounded paging", () => {
+  it("already-reminded loans do not starve newer un-reminded ones (spans several pages)", async () => {
+    const { t, owner, borrower, toolId } = await setup();
+    // 150 OLDEST overdue loans are already reminded today; 5 newer ones are not.
+    await t.run(async (ctx) => {
+      for (let i = 0; i < 150; i++) {
+        const loanId = await ctx.db.insert("loans", {
+          toolId,
+          ownerId: owner._id,
+          borrowerId: borrower._id,
+          startDate: "2026-09-01",
+          endDate: "2026-09-02",
+          status: "approved",
+          createdAt: 1,
+          updatedAt: 1,
+        });
+        await ctx.db.insert("reminders", {
+          idempotencyKey: `${loanId}:${TODAY}`,
+          loanId,
+          reminderDate: TODAY,
+          outcome: "sent",
+          createdAt: 1,
+        });
+      }
+    });
+    const res = await t.fetch("/api/n8n/overdue-loans", { method: "GET", headers: auth });
+    const body = await res.json();
+    // setup()'s own overdue loan (endDate 2026-11-05) is the newest; no earlier un-reminded loans exist.
+    expect(body.loans).toHaveLength(1);
+    expect(body.loans[0].endDate).toBe("2026-11-05");
+  });
+
+  it("returns at most 100 loans per call", async () => {
+    const { t, owner, borrower, toolId } = await setup();
+    await t.run(async (ctx) => {
+      for (let i = 0; i < 120; i++) {
+        await ctx.db.insert("loans", {
+          toolId,
+          ownerId: owner._id,
+          borrowerId: borrower._id,
+          startDate: "2026-10-01",
+          endDate: "2026-10-02",
+          status: "approved",
+          createdAt: 1,
+          updatedAt: 1,
+        });
+      }
+    });
+    const body = await (await t.fetch("/api/n8n/overdue-loans", { method: "GET", headers: auth })).json();
+    expect(body.loans).toHaveLength(100);
+  });
+});
+
 describe("POST /api/n8n/reminders", () => {
   it("is idempotent: second POST -> duplicate, exactly one reminder row and one event", async () => {
     const { t, overdue } = await setup();
@@ -187,6 +251,14 @@ describe("POST /api/n8n/reminders", () => {
     expect(ev[0]).toMatchObject({ status: "failed" });
   });
 
+  it("accepts a reminderDate of yesterday or tomorrow (clock skew tolerance)", async () => {
+    const { t, overdue } = await setup();
+    for (const d of ["2026-11-07", "2026-11-09"]) {
+      const res = await t.fetch("/api/n8n/reminders", post({ loanId: overdue, reminderDate: d, outcome: "sent" }));
+      expect(res.status, d).toBe(201);
+    }
+  });
+
   it("400 for invalid bodies", async () => {
     const { t, overdue } = await setup();
     const bad: unknown[] = [
@@ -196,6 +268,9 @@ describe("POST /api/n8n/reminders", () => {
       {},
       { loanId: overdue, reminderDate: "2026-02-30", outcome: "sent" },
       { loanId: overdue, reminderDate: "tomorrow", outcome: "sent" },
+      { loanId: overdue, reminderDate: "2026-11-06", outcome: "sent" }, // > 1 day in the past
+      { loanId: overdue, reminderDate: "2026-11-10", outcome: "sent" }, // > 1 day in the future
+      { loanId: overdue, reminderDate: "1999-01-01", outcome: "sent" },
       { loanId: overdue, reminderDate: TODAY, outcome: "maybe" },
       { loanId: 5, reminderDate: TODAY, outcome: "sent" },
       { loanId: "garbage-id", reminderDate: TODAY, outcome: "sent" },

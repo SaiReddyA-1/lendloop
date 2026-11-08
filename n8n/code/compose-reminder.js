@@ -6,7 +6,13 @@ const esc = (v) =>
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
-const line = (v) => String(v).replace(/[\u0000-\u001F\u007F-\u009F]/g, ' ').trim().slice(0, 120);
+// Also strips zero-width/bidi/format chars (spoofing, e.g. RLO) before escaping; mirrors convex/lib/validation.ts sanitizeText.
+const line = (v) =>
+  String(v)
+    .replace(/[​-‏‪-‮⁠-⁩﻿]/g, '')
+    .replace(/[\u0000-\u001F\u007F-\u009F]/g, ' ')
+    .trim()
+    .slice(0, 120);
 
 return $input.all().map((item) => {
   const l = item.json;

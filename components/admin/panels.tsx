@@ -23,12 +23,14 @@ import { categoryLabel } from "@/lib/categories";
 import { formatDateTime, formatDay, formatRange } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { RemoveToolDialog } from "./remove-tool-dialog";
+import { RetryEventDialog } from "./retry-event-dialog";
 import { TrustedLenderDialog } from "./trusted-lender-dialog";
 
 export type AdminTool = FunctionReturnType<typeof api.admin.listTools>[number];
 export type AdminLoan = FunctionReturnType<typeof api.admin.listLoans>[number];
 export type AdminUser = FunctionReturnType<typeof api.admin.listUsers>[number];
 export type AuditRow = FunctionReturnType<typeof api.admin.listAuditLog>[number];
+export type FailedEventRow = FunctionReturnType<typeof api.admin.listFailedAutomationEvents>[number];
 export type WorkflowErrorRow = FunctionReturnType<typeof api.admin.listWorkflowErrors>[number];
 
 /** Presentational panels: `undefined` data means loading. Containers live in admin-console.tsx. */
@@ -411,6 +413,7 @@ const AUDIT_TEXT: Record<AuditRow["action"], string> = {
   "user.trusted.revoke": "removed Trusted Lender",
   "user.role.promote": "made admin",
   "user.role.demote": "removed admin role",
+  "automation.retry": "retried a failed notification",
 };
 
 const time = (ts: number) => (
@@ -512,5 +515,75 @@ export function ErrorsPanel({ rows }: { rows: WorkflowErrorRow[] | undefined }) 
         </>
       )}
     />
+  );
+}
+
+// ----------------------------------------------------- Failed notifications
+
+const EVENT_TEXT: Record<FailedEventRow["type"], string> = {
+  request_created: "New request",
+  request_approved: "Request approved",
+  request_declined: "Request declined",
+  request_cancelled: "Request cancelled",
+  loan_returned: "Loan returned",
+  overdue_reminder: "Overdue reminder",
+  workflow_error: "Workflow error",
+};
+
+/** Failed outbox events with a confirmed manual retry. Renders nothing while loading or when there are none. */
+export function FailedEventsPanel({ rows }: { rows: FailedEventRow[] | undefined }) {
+  if (rows === undefined || rows.length === 0) return null;
+  const label = (r: FailedEventRow) => `${EVENT_TEXT[r.type]} for ${r.toolName}`;
+  const action = (r: FailedEventRow) =>
+    r.type === "workflow_error" || r.type === "overdue_reminder" ? (
+      <Muted>n/a</Muted>
+    ) : (
+      <RetryEventDialog eventId={r._id} label={label(r)} />
+    );
+  return (
+    <section aria-labelledby="failed-events-heading" className="mb-8 space-y-3">
+      <h2 id="failed-events-heading" className="text-lg font-semibold">
+        Failed notifications
+      </h2>
+      <p className="text-sm text-muted-foreground">
+        These notifications could not be delivered. Retrying queues delivery again.
+      </p>
+      <Shell
+        label="Failed notifications"
+        rows={rows}
+        getKey={(r) => r._id}
+        head={
+          <>
+            <TableHead>Last failure</TableHead>
+            <TableHead>Event</TableHead>
+            <TableHead>Error</TableHead>
+            <TableHead>Attempts</TableHead>
+            <TableHead>
+              <span className="sr-only">Actions</span>
+            </TableHead>
+          </>
+        }
+        row={(r) => (
+          <>
+            <TableCell className="whitespace-nowrap">{time(r.updatedAt)}</TableCell>
+            <TableCell>{label(r)}</TableCell>
+            <TableCell className="font-mono text-xs">{r.lastErrorCode ?? <Muted>n/a</Muted>}</TableCell>
+            <TableCell>{r.attempts}</TableCell>
+            <TableCell className="text-right">{action(r)}</TableCell>
+          </>
+        )}
+        card={(r) => (
+          <>
+            <p className="text-muted-foreground">{time(r.updatedAt)}</p>
+            <dl className="space-y-1">
+              <Field label="Event">{label(r)}</Field>
+              <Field label="Error">{r.lastErrorCode ?? <Muted>n/a</Muted>}</Field>
+              <Field label="Attempts">{r.attempts}</Field>
+            </dl>
+            {action(r)}
+          </>
+        )}
+      />
+    </section>
   );
 }
