@@ -5,6 +5,15 @@
 #   3. exec the image's original entrypoint (which execs `n8n`)
 set -eu
 
+# Railway mounts volumes owned by root. If started as root: give the n8n data dir to `node`,
+# then re-exec this script as `node` (busybox su -p keeps the environment). n8n never runs as root.
+if [ "$(id -u)" = "0" ]; then
+  mkdir -p /home/node/.n8n
+  chown -R node:node /home/node/.n8n
+  export HOME=/home/node
+  exec su -p -s /bin/sh -c "exec /opt/lendloop/entrypoint.sh" node
+fi
+
 fail() {
   echo "lendloop-entrypoint: ERROR: $1" >&2
   exit 1
