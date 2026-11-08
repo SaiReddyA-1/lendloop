@@ -1,0 +1,12 @@
+# Never upload local secrets or state with `vercel deploy`
+.env*
+!.env.example
+convex.env*
+!convex.env.example
+n8n/.env
+n8n/secrets/
+.convex/
+.agents/
+.next/
+node_modules/
+coverage/

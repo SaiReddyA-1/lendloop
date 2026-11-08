@@ -64,3 +64,6 @@ convex.env.local
 # Third-party agent skills installed by tooling (contain forbidden dash characters; not project source)
 /.agents/
 /skills-lock.json
+
+.vercel
+.env*
