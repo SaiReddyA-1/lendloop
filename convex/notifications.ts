@@ -8,7 +8,8 @@ import { signWebhook } from "./lib/hmac";
 export const MAX_ATTEMPTS = 5;
 /** Delay before retry N (index 0 = after attempt 1). Length must be MAX_ATTEMPTS - 1. */
 export const BACKOFF_MS = [30_000, 120_000, 480_000, 1_800_000, 7_200_000] as const;
-export const DELIVERY_TIMEOUT_MS = 10_000;
+// Must exceed n8n WF1 worst case (email node: 3 tries x 5s wait) so Convex does not time out while n8n is still retrying.
+export const DELIVERY_TIMEOUT_MS = 30_000;
 
 export type NotificationPayload = {
   eventId: string;

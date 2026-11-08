@@ -12,7 +12,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "authz": "node scripts/check-authz.mjs",
-    "check": "npm run typecheck && npm run lint && npm run authz && npm test"
+    "scan:secrets": "node scripts/scan-secrets.mjs",
+    "check": "npm run typecheck && npm run lint && npm run authz && npm run scan:secrets && npm test"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.9.25",

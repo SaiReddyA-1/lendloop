@@ -8,11 +8,13 @@ Standards: OWASP ASVS 5.0 L2, OWASP Top 10 2025, OWASP API Security Top 10 2023.
 | A01 Broken Access Control | `requireUser`/`requireAdmin`/`requireToolOwner`/`requireLoanParty` (`convex/lib/auth.ts`); identity from `ctx.auth` only; `npm run authz` static guard; proxy gate (UX only). Tests: `convex/lib/auth.test.ts`, `convex/users.test.ts` | partial (guards + users done; feature functions in later phases) |
 | A02 Security Misconfiguration | Static security headers, `poweredByHeader: false`, strict TS, env templates | done |
 | A03 Software Supply Chain Failures | Lockfile, minimal deps, removed unneeded `cn` package, `npm audit` review | partial |
-| A04 Cryptographic Failures | TLS + HSTS preload; tokens handled by Clerk; HMAC for n8n webhooks | partial (HSTS done) |
+| A04 Cryptographic Failures | TLS + HSTS preload; tokens handled by Clerk; HMAC-SHA256 for n8n webhooks, verified in n8n (ADR-025) | partial (HSTS done) |
 | A05 Injection | `v.*` arg validation + domain checks; no raw queries; React escaping | planned |
 | A06 Insecure Design | `loanStateMachine.ts` is the only definition of loan transitions; overlap re-check on approve; auto-decline of conflicting requests; owner-only return (ADR-014..017). Tests: `loans.test.ts`, `loanStateMachine.test.ts` | partial (loans/tools done) |
 | A07 Authentication Failures | Delegated to Clerk (MFA, sessions); Convex validates JWT issuer; UNAUTHENTICATED / USER_NOT_PROVISIONED fail-closed; admin by immutable Clerk id. Tests: `users.test.ts`, `auth.test.ts` | done |
-| A08 Software or Data Integrity Failures | Signed n8n webhooks; inbound bearer token compared in constant time | planned |
+| A08 Software or Data Integrity Failures | Signed n8n webhooks verified in n8n (constant-time, 300 s replay window, dedupe ADR-026); inbound bearer token compared in constant time; 
+pm run scan:secrets guards exports | implemented, E2E-verified (
+8n/E2E-RESULTS.md) |
 | A09 Security Logging and Alerting Failures | Audit log of state changes; no PII in logs | planned |
 | A10 Mishandling of Exceptional Conditions | Generic client errors, typed `ConvexError`, fail-closed guards | planned |
 
@@ -25,10 +27,10 @@ Standards: OWASP ASVS 5.0 L2, OWASP Top 10 2025, OWASP API Security Top 10 2023.
 | API4 Unrestricted Resource Consumption | `take()` caps (200 tools / 100 loans; ADR-018), name/description length limits, 50 active tools per user, 5 pending + 10/hour requests per borrower, 30-day max loan (ADR-019). Production: pagination + `@convex-dev/rate-limiter` | partial |
 | API5 Broken Function Level Authorization | `requireAdmin`; admin ops are `internalMutation`s not on `api`; `// AUTH:` + `npm run authz`. Tests: `admin.test.ts`, `auth.test.ts` | partial (foundation done) |
 | API6 Unrestricted Access to Sensitive Business Flows | Request flow: valid/non-past dates, max duration, no self-borrow, no double-booking, no duplicate pending, per-user pending + hourly caps; approve re-checks availability and expiry; only the owner approves/declines/returns, only the borrower cancels; invalid transitions rejected. Tests: `loans.test.ts` | done (rate-limiter service planned) |
-| API7 Server Side Request Forgery | Fixed n8n URL from env; no user-supplied URLs fetched | planned |
+| API7 Server Side Request Forgery | Fixed n8n URL from env; no user-supplied URLs fetched; n8n calls only the fixed LENDLOOP_CONVEX_SITE_URL | implemented |
 | API8 Security Misconfiguration | Headers, CSP, env hygiene | done |
 | API9 Improper Inventory Management | One Convex deployment per env; documented functions | planned |
-| API10 Unsafe Consumption of APIs | Validate n8n inbound payloads with `v.*`; authenticate callers | planned |
+| API10 Unsafe Consumption of APIs | Validate n8n inbound payloads with `v.*`; authenticate callers | implemented |
 
 ## Phase 1 specifics
 - Headers (`next.config.ts`): HSTS, nosniff, Referrer-Policy, Permissions-Policy, X-Frame-Options, COOP. done
@@ -55,3 +57,15 @@ Standards: OWASP ASVS 5.0 L2, OWASP Top 10 2025, OWASP API Security Top 10 2023.
 - Logging policy (A09): delivery logs only `{evt, eventId, attempt, code}`; error codes are short enums (`HTTP_503`, `TIMEOUT`, `NETWORK`, `NOT_CONFIGURED`, `NO_RECIPIENT_EMAIL`, `WORKFLOW_ERROR`). Workflow-error write-back is sanitized, email-redacted and truncated (300 chars). Admin actions (`tool.remove`, trusted grant/revoke) are audited with actor and reason; failed deliveries and workflow errors are visible to admins (`listWorkflowErrors`, event status) so failures alert a human rather than vanish.
 - API8 misconfiguration: three env vars are read only in `convex/lib/env.ts`; unset secrets disable the integration instead of falling back to a default; `convex.env.example` holds placeholders only.
 - Admin API (API5): every `admin.*` function calls `requireAdmin`; projections exclude email, Clerk ids and tokenIdentifier; admins cannot change their own trusted status. `automation.listForLoans` silently omits loans the caller is not a party to (no existence leak, API1).
+
+## Phase 7 specifics (n8n workflows)
+- n8n verifies every webhook: required headers, |now - ts| <= 300 s, HMAC over the raw bytes, constant-time compare; failures return a bare 401. The secret is LENDLOOP_WEBHOOK_SECRET (n8n env, ADR-025), never in workflow JSON.
+- Replays: emailed event ids are remembered (newest 500) and answered duplicate (ADR-026). Email failure -> 502 so Convex retries (ADR-027).
+- Workflow exports carry credential {id,name} only (no data, no pinData); scripts/scan-secrets.mjs (in 
+pm run check) fails on Clerk keys, bearer tokens, private keys, long hex values and credential data in 
+8n/workflows/*.json.
+- Inbound token lives in an encrypted n8n Header Auth credential created by 
+8n/scripts/bootstrap.* from env (temp file deleted). Residual risk: N8N_BLOCK_ENV_ACCESS_IN_NODE=false lets workflow editors read n8n env; restrict editor access.
+- Error workflow sends only a redacted, 300-char summary (no payload, emails/tokens stripped) to the admin and Convex.
+- n8n/Mailpit bind to 127.0.0.1; in production expose only the webhook path over HTTPS (ADR-029). N8N_SECURE_COOKIE=false is local-only.
+- Seed (convex/seed.ts) is internal-only; scripts/seed-clerk-users.mjs refuses non-sk_test_ keys.

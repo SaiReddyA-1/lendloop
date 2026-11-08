@@ -24,3 +24,9 @@ export function n8nInboundToken(): string {
   // eslint-disable-next-line @convex-dev/no-process-env -- centralized env access (see file header)
   return process.env.N8N_INBOUND_TOKEN ?? "";
 }
+
+/** Clerk issuer URL; tokenIdentifier = `${issuer}|${clerkUserId}`. Used by the seed to map real Clerk logins. */
+export function clerkJwtIssuerDomain(): string {
+  // eslint-disable-next-line @convex-dev/no-process-env -- centralized env access (see file header)
+  return process.env.CLERK_JWT_ISSUER_DOMAIN ?? "";
+}

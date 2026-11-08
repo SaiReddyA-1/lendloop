@@ -1,0 +1,335 @@
+{
+  "id": "lendloopWf02",
+  "name": "LendLoop · Overdue reminders",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## LendLoop - Overdue reminders\nDaily 09:00 (workflow timezone = `GENERIC_TIMEZONE`): fetch overdue approved loans from Convex, email each borrower, record the outcome.\n\nThe reminder key is `<loanId>:<date>` computed by Convex, so a second run the same day sends nothing (the overdue list excludes loans already reminded) and a duplicate POST returns `duplicate`.\n\n**Needs env**: `LENDLOOP_CONVEX_SITE_URL`, `LENDLOOP_MAIL_FROM`.\n**Needs credentials**: Header Auth `LendLoop Convex inbound` (Authorization: Bearer ...), SMTP `LendLoop SMTP`.\nUse the Manual Trigger for demos. If the email fails after retries the outcome `failed` is recorded for the day.",
+        "height": 380,
+        "width": 600,
+        "color": 4
+      },
+      "id": "e3e973c7-c836-4954-a95b-148b5d94a12b",
+      "name": "Note: purpose",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -160,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * *"
+            }
+          ]
+        }
+      },
+      "id": "5ae6cc89-9b0a-400a-ab10-6b27efb2eabd",
+      "name": "Every day 09:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "244d9338-d263-4d67-a2d5-3040646e7553",
+      "name": "Manual trigger (demo)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.LENDLOOP_CONVEX_SITE_URL }}/api/n8n/overdue-loans",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "d2531376-a763-4b75-a07f-44c95ed64cee",
+      "name": "Get overdue loans",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        240,
+        400
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "lendloopInbound1",
+          "name": "LendLoop Convex inbound"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "loans",
+        "include": "noOtherFields",
+        "options": {}
+      },
+      "id": "93607b1f-ca3f-4483-a165-14559d5e8916",
+      "name": "Split loans",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        480,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// n8n Code node \"Compose reminder\": one email per overdue loan (input = one item per loan after Split Out).\nconst esc = (v) =>\n  String(v)\n    .replace(/&/g, '&amp;')\n    .replace(/</g, '&lt;')\n    .replace(/>/g, '&gt;')\n    .replace(/\"/g, '&quot;')\n    .replace(/'/g, '&#39;');\nconst line = (v) => String(v).replace(/[\\u0000-\\u001F\\u007F-\\u009F]/g, ' ').trim().slice(0, 120);\n\nreturn $input.all().map((item) => {\n  const l = item.json;\n  const tool = line(l.toolName);\n  const name = line(l.borrowerName || 'there');\n  const days = Number(l.daysOverdue) || 0;\n  const body =\n    `\"${tool}\" was due back on ${l.endDate} and is now ${days} day${days === 1 ? '' : 's'} overdue. ` +\n    `Please return it to its owner as soon as you can, or contact them to agree a new date.`;\n  return {\n    json: {\n      loanId: l.loanId,\n      to: l.borrowerEmail,\n      subject: `Overdue: please return ${tool}`,\n      text: `Hi ${name},\\n\\n${body}\\n\\n-- LendLoop`,\n      html: `<p>Hi ${esc(name)},</p><p>${esc(body)}</p><p style=\"color:#666\">LendLoop</p>`,\n    },\n    pairedItem: item.pairedItem,\n  };\n});\n"
+      },
+      "id": "858e3e15-b703-4628-a2ed-eed5f87eec30",
+      "name": "Compose reminder",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $env.LENDLOOP_MAIL_FROM }}",
+        "toEmail": "={{ $json.to }}",
+        "subject": "={{ $json.subject }}",
+        "emailFormat": "both",
+        "text": "={{ $json.text }}",
+        "html": "={{ $json.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "a46c8b35-8376-44a9-ac7f-ddee6c0ad207",
+      "name": "Send reminder",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        960,
+        400
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "lendloopSmtp01",
+          "name": "LendLoop SMTP"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "4fd30807-624d-4d4d-a00f-161cf25c7710",
+              "name": "loanId",
+              "value": "={{ $('Compose reminder').item.json.loanId }}",
+              "type": "string"
+            },
+            {
+              "id": "91d7c330-25e9-43dc-aecf-4db61c1957c5",
+              "name": "outcome",
+              "value": "sent",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ad3facf3-acd3-48e6-afe2-e6dc79d25f69",
+      "name": "Outcome: sent",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1200,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "8e46f0d7-5c8b-493f-ab33-02f56a049758",
+              "name": "loanId",
+              "value": "={{ $('Compose reminder').item.json.loanId }}",
+              "type": "string"
+            },
+            {
+              "id": "ce037464-f59b-4f36-a4c1-062e2a93b5ef",
+              "name": "outcome",
+              "value": "failed",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "13338ad8-b4ce-4f29-a694-3ee364efefa8",
+      "name": "Outcome: failed",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1200,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.LENDLOOP_CONVEX_SITE_URL }}/api/n8n/reminders",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ loanId: $json.loanId, reminderDate: $('Get overdue loans').first().json.date, outcome: $json.outcome }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "36a906c5-3dac-4ed3-a23f-669b130acf0c",
+      "name": "Record reminder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1440,
+        400
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "lendloopInbound1",
+          "name": "LendLoop Convex inbound"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    }
+  ],
+  "connections": {
+    "Every day 09:00": {
+      "main": [
+        [
+          {
+            "node": "Get overdue loans",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual trigger (demo)": {
+      "main": [
+        [
+          {
+            "node": "Get overdue loans",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get overdue loans": {
+      "main": [
+        [
+          {
+            "node": "Split loans",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split loans": {
+      "main": [
+        [
+          {
+            "node": "Compose reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compose reminder": {
+      "main": [
+        [
+          {
+            "node": "Send reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send reminder": {
+      "main": [
+        [
+          {
+            "node": "Outcome: sent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Outcome: failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Outcome: sent": {
+      "main": [
+        [
+          {
+            "node": "Record reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Outcome: failed": {
+      "main": [
+        [
+          {
+            "node": "Record reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "lendloopWf99",
+    "saveDataSuccessExecution": "none"
+  },
+  "active": false,
+  "tags": []
+}

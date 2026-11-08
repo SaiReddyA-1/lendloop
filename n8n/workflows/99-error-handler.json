@@ -1,0 +1,144 @@
+{
+  "id": "lendloopWf99",
+  "name": "LendLoop · Error handler",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## LendLoop - Error handler\nSet as `errorWorkflow` of the other LendLoop workflows. Builds a SAFE summary (no payload, emails/tokens redacted, 300 chars) and\n1. emails the admin (`LENDLOOP_ADMIN_ALERT_EMAIL`),\n2. POSTs it to Convex `/api/n8n/automation-events` (shown in the admin dashboard).\n\n**Needs env**: `LENDLOOP_ADMIN_ALERT_EMAIL`, `LENDLOOP_MAIL_FROM`, `LENDLOOP_CONVEX_SITE_URL`.\n**Needs credentials**: SMTP `LendLoop SMTP`, Header Auth `LendLoop Convex inbound`.",
+        "height": 340,
+        "width": 560,
+        "color": 4
+      },
+      "id": "78c4f393-61bf-400e-a99d-6e5ab25ae5ed",
+      "name": "Note: purpose",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -160,
+        -120
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "cfa9b9cc-119d-4631-a283-3b7055ba8510",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// n8n Code node \"Summarize\": turn the Error Trigger payload into a SAFE, short summary.\n// - ids (loanId / eventId) are extracted first, only from \"loanId=<id>\" / \"eventId=<id>\" fragments\n// - then emails, bearer tokens and long token-like strings are redacted, and the text is truncated\nconst input = $input.first().json;\nconst exec = input.execution || {};\nconst wf = input.workflow || {};\nconst rawMessage = String((exec.error && exec.error.message) || 'Unknown error');\n\nconst idOf = (key) => {\n  const m = new RegExp(key + '[=:]\\\\s*([a-z0-9]{20,40})', 'i').exec(rawMessage);\n  return m ? m[1] : undefined;\n};\nconst loanId = idOf('loanId');\nconst eventId = idOf('eventId');\n\nconst redact = (s) =>\n  String(s)\n    .replace(/[\\u0000-\\u001F\\u007F-\\u009F]/g, ' ')\n    .replace(/Bearer\\s+\\S+/gi, 'Bearer [redacted]')\n    .replace(/[^\\s@<>\"']+@[^\\s@<>\"']+/g, '[email]')\n    .replace(/\\b[A-Za-z0-9_\\-+/=]{32,}\\b/g, '[redacted]')\n    .replace(/\\s+/g, ' ')\n    .trim();\n\nconst message = redact(rawMessage).slice(0, 300) || 'Unknown error';\nconst workflowName = redact(wf.name || 'unknown').slice(0, 100);\nconst executionId = String(exec.id || 'unknown').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64) || 'unknown';\nconst nodeName = redact(exec.lastNodeExecuted || '').slice(0, 100);\n\nconst event = { workflowName, executionId, message };\nif (nodeName) event.nodeName = nodeName;\nif (loanId) event.loanId = loanId;\nif (eventId) event.eventId = eventId;\n\nreturn [\n  {\n    json: {\n      event,\n      subject: `[LendLoop] n8n workflow failed: ${workflowName}`,\n      text:\n        `Workflow: ${workflowName}\\nExecution: ${executionId}\\nLast node: ${nodeName || 'n/a'}\\n` +\n        `Message: ${message}\\n\\nOpen n8n > Executions to investigate.`,\n    },\n  },\n];\n"
+      },
+      "id": "5b2e982d-06cf-4800-a097-e28e55d231dd",
+      "name": "Summarize",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $env.LENDLOOP_MAIL_FROM }}",
+        "toEmail": "={{ $env.LENDLOOP_ADMIN_ALERT_EMAIL }}",
+        "subject": "={{ $json.subject }}",
+        "emailFormat": "both",
+        "text": "={{ $json.text }}",
+        "html": "={{ $json.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "d5c3dd90-76ea-498a-a665-68d4a509e15b",
+      "name": "Alert admin",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        480,
+        200
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "lendloopSmtp01",
+          "name": "LendLoop SMTP"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.LENDLOOP_CONVEX_SITE_URL }}/api/n8n/automation-events",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.event) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "f444ff8d-3e35-4609-a0c9-142ccc7b2773",
+      "name": "Report to Convex",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        400
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "lendloopInbound1",
+          "name": "LendLoop Convex inbound"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Summarize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize": {
+      "main": [
+        [
+          {
+            "node": "Alert admin",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Report to Convex",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "tags": []
+}

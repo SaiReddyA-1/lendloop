@@ -214,7 +214,7 @@ describe("notifications.deliver", () => {
     );
     const p = t.action(internal.notifications.deliver, { eventId });
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    await vi.advanceTimersByTimeAsync(10_000);
+    await vi.advanceTimersByTimeAsync(30_000);
     await p;
     expect(await getEvent(t, eventId)).toMatchObject({ lastErrorCode: "TIMEOUT", status: "pending" });
   });

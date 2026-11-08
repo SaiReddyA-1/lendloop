@@ -1,0 +1,71 @@
+# LendLoop automation stack: n8n + Mailpit (local SMTP catcher with web UI).
+#   cp .env.example .env   # fill in secrets (never commit .env)
+#   docker compose up -d
+#   ./scripts/bootstrap.sh # import credentials (from env) + workflows, publish
+#   docker compose restart n8n
+# n8n UI: http://localhost:5678   Mailpit UI: http://localhost:8025
+name: lendloop-automation
+
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:2.46.6 # pinned; upgrade deliberately
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5678:5678" # bound to loopback only
+    env_file: .env
+    environment:
+      N8N_HOST: localhost
+      N8N_PORT: "5678"
+      N8N_PROTOCOL: http
+      N8N_WEBHOOK_URL: http://localhost:5678/ # replaces deprecated WEBHOOK_URL (n8n >= 2.35)
+      GENERIC_TIMEZONE: ${GENERIC_TIMEZONE:-UTC}
+      TZ: ${GENERIC_TIMEZONE:-UTC}
+      # Local HTTP only. Set to true (default) behind HTTPS in any shared/prod environment.
+      N8N_SECURE_COOKIE: "false"
+      # Code node "Verify signature" uses node:crypto (HMAC + timingSafeEqual).
+      NODE_FUNCTION_ALLOW_BUILTIN: crypto
+      # Workflows read LENDLOOP_* via $env. Trade-off documented in n8n/README.md.
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
+      N8N_VERSION_NOTIFICATIONS_ENABLED: "false"
+      # Keep execution data bounded (GDPR minimisation + disk).
+      EXECUTIONS_DATA_PRUNE: "true"
+      EXECUTIONS_DATA_MAX_AGE: "168" # hours
+      EXECUTIONS_DATA_SAVE_ON_SUCCESS: none
+    extra_hosts:
+      - "host.docker.internal:host-gateway" # reach the local Convex backend on the host
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./workflows:/workflows:ro
+      - ./scripts:/scripts:ro
+    depends_on:
+      mailpit:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5678/healthz >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  mailpit:
+    image: axllent/mailpit:v1.33.0 # pinned
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8025:8025" # web UI (loopback only); SMTP 1025 stays on the compose network
+    environment:
+      MP_DATABASE: /data/mailpit.db
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+      MP_MAX_MESSAGES: "5000"
+    volumes:
+      - mailpit_data:/data
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  n8n_data:
+  mailpit_data:

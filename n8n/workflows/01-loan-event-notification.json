@@ -1,0 +1,360 @@
+{
+  "id": "lendloopWf01",
+  "name": "LendLoop · Loan event notification",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## LendLoop - Loan event notification\nConvex POSTs a signed JSON event; this workflow verifies it, emails the recipient and answers.\n\n**Responses**: 200 `delivered` / `duplicate`, 401 `invalid_signature`, 502 `email_failed` (Convex retries 408/429/5xx with backoff, other 4xx are permanent).\n\n**Needs env**: `LENDLOOP_WEBHOOK_SECRET`, `LENDLOOP_MAIL_FROM`, `NODE_FUNCTION_ALLOW_BUILTIN=crypto`.\n**Needs credential**: SMTP `LendLoop SMTP`.\n**Dedupe**: eventIds already emailed are kept in workflow static data (newest 500; production executions only).\nError workflow: `LendLoop - Error handler`. Never log payloads (PII).",
+        "height": 420,
+        "width": 560,
+        "color": 4
+      },
+      "id": "ca5d489e-8dec-4e73-a5e5-3c2194681378",
+      "name": "Note: purpose",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -160,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lendloop-loan-events",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "id": "7d71bcbd-3b5b-452f-a7e7-5be6ade33ef1",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        400
+      ],
+      "webhookId": "e8ae88a7-8407-4a60-a788-dc282bc4cecc"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// n8n Code node \"Verify signature\" (mode: Run Once for All Items).\n// Needs NODE_FUNCTION_ALLOW_BUILTIN=crypto and LENDLOOP_WEBHOOK_SECRET in the n8n environment.\n// Never log the payload, headers or secret.\nconst crypto = require('crypto');\n\nconst item = $input.first();\nconst headers = {};\nfor (const [k, v] of Object.entries(item.json.headers || {})) headers[k.toLowerCase()] = v;\n\nconst reject = () => [{ json: { valid: false, duplicate: false } }];\n\nconst secret = $env.LENDLOOP_WEBHOOK_SECRET;\nif (!secret) return reject();\n\nconst ts = String(headers['x-lendloop-timestamp'] || '');\nconst sigHeader = String(headers['x-lendloop-signature'] || '');\nif (!/^\\d{1,12}$/.test(ts)) return reject();\nconst sigMatch = /^sha256=([0-9a-fA-F]{64})$/.exec(sigHeader);\nif (!sigMatch) return reject();\n\n// Replay window: +-300 s (ADR-021).\nif (Math.abs(Date.now() / 1000 - Number(ts)) > 300) return reject();\n\n// Raw body: webhook option \"Raw Body\" exposes the exact bytes as binary property `data`.\nlet raw;\ntry {\n  raw = await this.helpers.getBinaryDataBuffer(0, 'data');\n} catch (e) {\n  return reject();\n}\n\nconst expected = crypto.createHmac('sha256', secret).update(ts + '.').update(raw).digest();\nconst given = Buffer.from(sigMatch[1], 'hex');\n// Equal lengths are guaranteed (32 bytes each), so timingSafeEqual cannot throw.\nif (given.length !== expected.length || !crypto.timingSafeEqual(given, expected)) return reject();\n\nlet payload;\ntry {\n  payload = JSON.parse(raw.toString('utf8'));\n} catch (e) {\n  return reject();\n}\nconst s = (v) => typeof v === 'string';\nif (\n  !payload ||\n  !s(payload.eventId) ||\n  !s(payload.eventType) ||\n  !s(payload.toolName) ||\n  !payload.recipient ||\n  !s(payload.recipient.email)\n) {\n  return reject();\n}\n\n// De-duplication (ADR-026): only events that were already EMAILED are recorded (see \"Record event\").\nconst staticData = $getWorkflowStaticData('global');\nconst seen = staticData.processedEvents || {};\nconst duplicate = Object.prototype.hasOwnProperty.call(seen, payload.eventId);\n\nreturn [{ json: { valid: true, duplicate, payload } }];\n"
+      },
+      "id": "1f58d28c-e0a5-477c-afbb-550f56d71652",
+      "name": "Verify signature",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "362e9144-a464-4465-a4bb-b6388ce7ed8c",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f3adf93b-08fa-4cf8-a125-4f59024b51c4",
+      "name": "Signature valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        480,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"error\":\"invalid_signature\"}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "id": "81e8badd-7072-4c55-a9e2-73aaa5a9c572",
+      "name": "Respond 401",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        720,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "07e5269f-9247-4338-aa7c-9454d392848f",
+              "leftValue": "={{ $json.duplicate }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "493917e1-2921-4774-ab3e-76e45933e0b5",
+      "name": "Already processed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        720,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"status\":\"duplicate\"}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "276b5188-ff5b-4662-a9e8-6931f7c98b01",
+      "name": "Respond duplicate",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        960,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// n8n Code node \"Compose email\": builds subject/text/html from the verified payload.\n// Every interpolated value is HTML-escaped in the html body; the subject/text are plain text.\nconst p = $input.first().json.payload;\n\nconst esc = (v) =>\n  String(v)\n    .replace(/&/g, '&amp;')\n    .replace(/</g, '&lt;')\n    .replace(/>/g, '&gt;')\n    .replace(/\"/g, '&quot;')\n    .replace(/'/g, '&#39;');\n// Header-injection guard for the subject (CR/LF/control chars out, length cap).\nconst line = (v) => String(v).replace(/[\\u0000-\\u001F\\u007F-\\u009F]/g, ' ').trim().slice(0, 120);\n\nconst tool = line(p.toolName);\nconst name = line(p.recipient.name || 'there');\nconst range = `${p.startDate} to ${p.endDate}`;\n\nconst templates = {\n  request_created: {\n    subject: `New borrow request for ${tool}`,\n    body: `Someone asked to borrow \"${tool}\" from ${range}. Open LendLoop to approve or decline the request.`,\n  },\n  request_approved: {\n    subject: `Your request for ${tool} was approved`,\n    body: `Good news: your request to borrow \"${tool}\" (${range}) was approved. Please arrange the hand-over with the owner.`,\n  },\n  request_declined: {\n    subject: `Your request for ${tool} was declined`,\n    body: `Your request to borrow \"${tool}\" (${range}) was declined. You can browse other tools on LendLoop.`,\n  },\n  request_cancelled: {\n    subject: `Request for ${tool} was cancelled`,\n    body: `The request to borrow \"${tool}\" (${range}) was cancelled.`,\n  },\n  loan_returned: {\n    subject: `${tool} was marked as returned`,\n    body: `\"${tool}\" (${range}) was marked as returned. Thanks for lending and borrowing responsibly!`,\n  },\n};\nconst tpl = templates[p.eventType];\nif (!tpl) {\n  // Unknown type: fail loudly (error workflow + 5xx) rather than silently dropping the event.\n  throw new Error('Unsupported eventType');\n}\n\nconst text = `Hi ${name},\\n\\n${tpl.body}\\n\\n-- LendLoop`;\nconst html =\n  `<p>Hi ${esc(name)},</p>` +\n  `<p>${esc(tpl.body)}</p>` +\n  `<p style=\"color:#666\">LendLoop &middot; Borrow what you need. Lend what you don't.</p>`;\n\nreturn [\n  {\n    json: {\n      eventId: p.eventId,\n      to: p.recipient.email,\n      subject: tpl.subject,\n      text,\n      html,\n    },\n  },\n];\n"
+      },
+      "id": "ef69fe5f-5ecf-4e3a-a29c-acc6d306aac5",
+      "name": "Compose email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $env.LENDLOOP_MAIL_FROM }}",
+        "toEmail": "={{ $json.to }}",
+        "subject": "={{ $json.subject }}",
+        "emailFormat": "both",
+        "text": "={{ $json.text }}",
+        "html": "={{ $json.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "1c06b868-da44-4148-a217-e0d24ce4ed8d",
+      "name": "Send email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1200,
+        480
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "lendloopSmtp01",
+          "name": "LendLoop SMTP"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// n8n Code node \"Record event\": remember an eventId AFTER its email was sent, so Convex retries of\n// a failed delivery are not mistaken for duplicates. Keeps the newest 500 ids. Runs only on success.\nconst eventId = $('Compose email').first().json.eventId;\nconst staticData = $getWorkflowStaticData('global');\nconst seen = staticData.processedEvents || {};\nseen[eventId] = Date.now();\nconst ids = Object.keys(seen);\nif (ids.length > 500) {\n  ids.sort((a, b) => seen[a] - seen[b]);\n  for (const id of ids.slice(0, ids.length - 500)) delete seen[id];\n}\nstaticData.processedEvents = seen;\nreturn [{ json: { recorded: true } }];\n"
+      },
+      "id": "08d695ed-af13-4bb1-a73e-f491c33befa0",
+      "name": "Record event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"status\":\"delivered\"}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "f924c6e6-767c-4c34-ac93-76617d073a86",
+      "name": "Respond delivered",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1680,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"status\":\"email_failed\"}",
+        "options": {
+          "responseCode": 502
+        }
+      },
+      "id": "00ab3f12-eab4-453e-a13c-ecf56d2e928f",
+      "name": "Respond 502",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1440,
+        600
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Verify signature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify signature": {
+      "main": [
+        [
+          {
+            "node": "Signature valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Signature valid?": {
+      "main": [
+        [
+          {
+            "node": "Already processed?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 401",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Already processed?": {
+      "main": [
+        [
+          {
+            "node": "Respond duplicate",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Compose email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compose email": {
+      "main": [
+        [
+          {
+            "node": "Send email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send email": {
+      "main": [
+        [
+          {
+            "node": "Record event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 502",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record event": {
+      "main": [
+        [
+          {
+            "node": "Respond delivered",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "lendloopWf99",
+    "saveDataSuccessExecution": "none"
+  },
+  "active": false,
+  "tags": []
+}
